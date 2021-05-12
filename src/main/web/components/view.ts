@@ -6,6 +6,7 @@ import { connect, store, GCEStore } from '../app/store';
 
 import { Router } from '@vaadin/router';
 
+//@ts-ignore
 import {bootstrapStyles} from '@granite-elements/granite-lit-bootstrap/granite-lit-bootstrap.js';
 
 export class ViewElement extends connect<GCEStore>(store)(LitElement) {

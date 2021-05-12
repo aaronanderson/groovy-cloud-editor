@@ -7,7 +7,9 @@
     "lib": ["dom", "esnext"],
     "strict": true,
     "esModuleInterop": true,
+	"importHelpers": true,
     "sourceMap": true,
+ 	"inlineSources": true,
 
     "allowSyntheticDefaultImports": true,
     "experimentalDecorators": true,

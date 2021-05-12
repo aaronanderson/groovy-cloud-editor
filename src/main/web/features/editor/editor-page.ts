@@ -7,11 +7,11 @@ import { ViewElement } from '../../components/view';
 import { GCEStore } from '../../app/store';
 import { back } from './editor-actions';
 
-
+import '../../components/editor';
 
 
 @customElement('groovy-editor-page')
-export class GroovyEditorElement extends ViewElement {
+export class GroovyEditorPageElement extends ViewElement {
 
 	@property({ type: String })
 	pageTitle = 'Editor';
@@ -19,12 +19,21 @@ export class GroovyEditorElement extends ViewElement {
 	@property({ type: Object })
 	targetScript: any = {};
 
-
+	
+	static get styles() {
+	  return [super.styles, css ` groovy-editor {
+						display: block;
+						width: 100%;		
+					}
+						 
+					`];
+	}
+	
 
 	firstUpdated() {
 		console.log("firstUpdate");		
 	}
-
+	
 
 		render() {
 
@@ -41,7 +50,7 @@ export class GroovyEditorElement extends ViewElement {
 			
 				<div class="form-group">
     				<label for="scriptContent">Script</label>
-    				<textarea class="form-control" id="scriptContent" rows="10" .value=${ifDefined(this.targetScript && this.targetScript.contents ? atob (this.targetScript.contents): undefined)}></textarea>
+    				<groovy-editor .script=${ifDefined(this.targetScript && this.targetScript.contents ? atob (this.targetScript.contents): undefined)}></groovy-editor>					
   				</div>	
 								
 				<div class="btn-group" role="group" aria-label="Run">			  		
@@ -79,4 +88,4 @@ export class GroovyEditorElement extends ViewElement {
 }
 
 
-export default GroovyEditorElement;
+export default GroovyEditorPageElement;

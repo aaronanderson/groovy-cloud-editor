@@ -9,10 +9,6 @@ module.exports = {
   },
   "routes": [
     {
-      src: '/etlu-modules.js',
-      dest: proxyDest,
-    },    
-    {
       src: '/api/.*',
       dest: proxyDest,
     },
@@ -23,10 +19,10 @@ module.exports = {
     "sourcemap": true,
     "out": "./target/web-build"
   },
-  "plugins": [
-    [
+  "plugins": [         	
+      "@snowpack/plugin-typescript",
       "./lit-scss-plugin.js",
-      {}
-    ]
+      "./lit-css-plugin.js",		    
   ]
 };
+

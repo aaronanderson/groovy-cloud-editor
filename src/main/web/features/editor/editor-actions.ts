@@ -193,6 +193,7 @@ export interface ScriptsResult {
 
 export interface RunResult {
 	result?: Object;
+	status: string;
 	message?: string;
 }
 

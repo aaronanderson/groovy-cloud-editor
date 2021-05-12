@@ -11,7 +11,7 @@ import { back } from './editor-actions';
 
 
 @customElement('groovy-run-page')
-export class GroovyRunElement extends ViewElement {
+export class GroovyRunPageElement extends ViewElement {
 
 	@property({ type: String })
 	pageTitle = 'Run';
@@ -69,4 +69,4 @@ export class GroovyRunElement extends ViewElement {
 }
 
 
-export default GroovyRunElement;
+export default GroovyRunPageElement;

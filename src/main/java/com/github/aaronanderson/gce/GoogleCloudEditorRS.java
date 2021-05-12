@@ -45,7 +45,7 @@ public class GoogleCloudEditorRS {
     String profile;
 
     @GET
-    @Path("/scripts")
+    @Path("scripts")
     public Response scripts() {
         try {
             JsonObjectBuilder status = Json.createObjectBuilder();
@@ -67,7 +67,7 @@ public class GoogleCloudEditorRS {
     }
 
     @POST
-    @Path("/run")
+    @Path("run")
     public Response run(JsonObject request) {
         try {
             String name = request.getString("name");

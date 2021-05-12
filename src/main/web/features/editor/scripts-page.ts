@@ -9,7 +9,7 @@ import { Script, fetchScripts, newScript, editScript, deleteScript, runScript, r
 
 
 @customElement('groovy-scripts-page')
-export class GroovyScriptsElement extends ViewElement {
+export class GroovyScriptsPageElement extends ViewElement {
 
 	@property({ type: String })
 	pageTitle = 'Scripts';
@@ -88,5 +88,5 @@ export class GroovyScriptsElement extends ViewElement {
 }
 
 
-export default GroovyScriptsElement;
+export default GroovyScriptsPageElement;
 

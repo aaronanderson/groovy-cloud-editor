@@ -8,6 +8,7 @@ import '../features/editor/scripts-page';
 import '../features/editor/editor-page';
 import '../features/editor/run-page';
 
+//@ts-ignore
 import {bootstrapStyles} from '@granite-elements/granite-lit-bootstrap/granite-lit-bootstrap.js';
 
 
