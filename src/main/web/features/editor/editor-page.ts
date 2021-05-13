@@ -1,5 +1,5 @@
 import {LitElement, CSSResult, html, css} from 'lit';
-import {property, customElement} from 'lit/decorators.js';
+import {property, customElement, query} from 'lit/decorators.js';
 import {ifDefined} from 'lit/directives/if-defined.js';
 
 import { ViewElement } from '../../components/view';
@@ -8,6 +8,7 @@ import { GCEStore } from '../../app/store';
 import { back } from './editor-actions';
 
 import '../../components/editor';
+import { GroovyEditorElement } from '../../components/editor';
 
 
 @customElement('groovy-editor-page')
@@ -19,24 +20,22 @@ export class GroovyEditorPageElement extends ViewElement {
 	@property({ type: Object })
 	targetScript: any = {};
 
-	
-	static get styles() {
-	  return [super.styles, css ` groovy-editor {
-						display: block;
-						width: 100%;		
-					}
-						 
-					`];
-	}
-	
+	@property({ type: Boolean })
+	modified= false;
 
-	firstUpdated() {
-		console.log("firstUpdate");		
-	}
+
+	@query('groovy-editor')
+	groovyEditor?: GroovyEditorElement;
 	
+	
+	constructor() {
+	    super();
+    	this.addEventListener('editor-update', (e: Event) => {this.modified = true; console.log(e)});
+  	}
 
-		render() {
-
+	
+	render() {		
+		const contents = ifDefined(this.targetScript && this.targetScript.contents ? atob (this.targetScript.contents): undefined);
 		return html`
 
 			${this.pageTitleTemplate}
@@ -50,14 +49,13 @@ export class GroovyEditorPageElement extends ViewElement {
 			
 				<div class="form-group">
     				<label for="scriptContent">Script</label>
-    				<groovy-editor .script=${ifDefined(this.targetScript && this.targetScript.contents ? atob (this.targetScript.contents): undefined)}></groovy-editor>					
+    				<groovy-editor .script=${contents} hintPath="/api/gce/hint"></groovy-editor>					
   				</div>	
 								
 				<div class="btn-group" role="group" aria-label="Run">			  		
-					<button type="button" class="btn btn-primary mr-2" @click=${(e: MouseEvent)=> this.dispatch(back())}>Save</button>
-					<button type="button" class="btn btn-secondary mr-2" @click=${(e: MouseEvent)=> this.dispatch(back())}>Run</button>
-					<button type="button" class="btn btn-secondary" @click=${(e: MouseEvent)=> this.dispatch(back())}>Back</button>					
-					
+					<button ?disabled=${!this.modified} type="button" class="btn btn-primary mr-2" @click=${(e: MouseEvent)=> this.dispatch(back())}>Save</button>
+					<button ?disabled=${!!this.modified} type="button" class="btn btn-secondary mr-2" @click=${(e: MouseEvent)=> this.dispatch(back())}>Run</button>
+					<button type="button" class="btn btn-secondary" @click=${(e: MouseEvent)=> this.dispatch(back())}>Back</button>	
 				</div>
 			</div>
 
@@ -68,7 +66,7 @@ export class GroovyEditorPageElement extends ViewElement {
 	
 	stateChanged(state: GCEStore) {
 		if (state.editor) {
-			console.log(state.editor);
+			//console.log(state.editor);
 			this.loading = state.editor.loading;
 			this.errorMessage = state.editor.errorMessage;
 			this.targetScript = state.editor.targetScript; 

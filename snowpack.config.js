@@ -21,8 +21,8 @@ module.exports = {
   },
   "plugins": [         	
       "@snowpack/plugin-typescript",
-      "./lit-scss-plugin.js",
-      "./lit-css-plugin.js",		    
+      //"./lit-scss-plugin.js",
+      "./lit-cssx-plugin.js",		    
   ]
 };
 
