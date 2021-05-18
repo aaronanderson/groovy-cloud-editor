@@ -6,9 +6,8 @@ module.exports = function(snowpackConfig, pluginOptions) {
 		transform: async ({ id, fileExt, contents }) => {
 			if (fileExt === '.js') {
 				let cssxPaths = [...contents.matchAll(/(('|")!cssx\|(.+)('|"))/g)].map(r => [r[1], r[3]]);
-				//console.log('js transform', id, fileExt, cssxPaths);
 				for (let cssxPath of cssxPaths) {
-					console.log('cssx load', id, cssxPath[1]);
+					//console.log('cssx load', id, cssxPath[1]);
 					let filePath = cssxPath[1];
 					if (!filePath.startsWith('.')) {
 						filePath = 'node_modules/' + filePath;

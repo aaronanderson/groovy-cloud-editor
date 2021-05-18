@@ -26,6 +26,10 @@ export const BACK_TO_HOME = 'BACK_TO_HOME'
 export const BACK_TO_HOME_SUCCESS = 'BACK_TO_HOME_SUCCESS'
 export const BACK_TO_HOME_ERROR = 'BACK_TO_HOME_ERROR'
 
+export const SAVE_SCRIPT = 'SAVE_SCRIPT'
+export const SAVE_SCRIPT_SUCCESS = 'SAVE_SCRIPT_SUCCESS'
+export const SAVE_SCRIPT_ERROR = 'SAVE_SCRIPT_ERROR'
+
 
 export const UPDATE_USER = 'UPDATE_USER'
 export const DELETE_USER = 'DELETE_USER'
@@ -38,7 +42,7 @@ export interface EditorState {
 
 	scripts: Script[];
 	targetScript?: Script;
-	runResult?: Object;
+	execution?: RunExecution;
 }
 
 
@@ -85,21 +89,22 @@ const loadScripts = async (db: any): Promise<Array<Script>> => {
 		throw Error(response.statusText);
 	}
 	let scripts: Array<Script> = scriptsResult.scripts;
-	await saveScripts(scripts, db);
+	const tx = db.transaction('scripts', 'readwrite');
+	const store = tx.objectStore('scripts');
+	for (let i = 0; i < scripts.length; i++) {
+		let s: Script = scripts[i];
+		let entry = { ...s, scriptId: i + 1 };
+		await store.put(entry);
+	}
 	return scripts;
 }
 
 const saveScripts = async (scripts: Array<Script>, db: any): Promise<void> => {
-	const tx = db.transaction('scripts', 'readwrite');
-	const store = tx.objectStore('scripts');
-	for (let s of scripts) {
-		let entry = { ...s, scriptId: s.name };
-		await store.put(entry);
-	}
+
 }
 
-export const newScript: any = () => async (dispatch: any) => {
-	await dispatch({ type: NEW_SCRIPT, payload: { targetScript: {} } });
+export const newScript: any = () => async (dispatch: any, getState: any) => {
+	await dispatch({ type: NEW_SCRIPT, payload: { targetScript: { name: 'new.groovy' } } });
 	Router.go('/edit');
 
 }
@@ -109,7 +114,7 @@ export const editScript: any = (index: number) => async (dispatch: any, getState
 	let s = scripts[index];
 	await dispatch({ type: EDIT_SCRIPT, payload: { targetScript: s } })
 	Router.go('/edit');
-	
+
 }
 
 export const deleteScript: any = (index: number) => async (dispatch: any, getState: any) => {
@@ -120,7 +125,7 @@ export const deleteScript: any = (index: number) => async (dispatch: any, getSta
 		dispatch({ type: DELETE_SCRIPT, payload: { index: index } });
 		const tx = db.transaction('scripts', 'readwrite');
 		const store = tx.objectStore('scripts');
-		let val = await store.delete([s.name]);
+		let val = await store.delete(s.scriptId);
 		console.log(s.name, val);
 		//await store.clear();
 	} finally {
@@ -149,7 +154,7 @@ export const runScript: any = (index: number) => async (dispatch: any, getState:
 		if (runResult.status == "error") {
 			throw Error(runResult.message);
 		}
-		dispatch({ type: RUN_SCRIPT_SUCCESS, payload: { runResult: runResult.result } })
+		dispatch({ type: RUN_SCRIPT_SUCCESS, payload: { execution: <RunExecution>{ result: runResult.result, out: runResult.out } } })
 	} catch (error) {
 		console.error('Error:', error);
 		dispatch({ type: RUN_SCRIPT_ERROR, payload: { error: error } })
@@ -162,6 +167,13 @@ export const resetScripts: any = () => async (dispatch: any) => {
 	dispatch({ type: RESET_SCRIPTS });
 	let db = await gceuDB();
 	try {
+		let cursor = await db.transaction('scripts', 'readwrite').store.openCursor();
+		while (cursor) {		
+			if (cursor && cursor.delete){
+				cursor.delete();
+			}				
+			cursor = await cursor.continue();
+		}
 		let scripts: Array<Script> = await loadScripts(db);
 		dispatch({ type: RESET_SCRIPTS_SUCCESS, payload: { scripts: scripts } })
 	} catch (error) {
@@ -187,14 +199,40 @@ export const back: any = () => async (dispatch: any) => {
 
 }
 
+export const save: any = (updateScript: Script) => async (dispatch: any) => {
+	dispatch({ type: SAVE_SCRIPT });
+	let db = await gceuDB();
+	try {
+		console.log("save", updateScript);
+		const tx = db.transaction('scripts', 'readwrite');
+		const store = tx.objectStore('scripts');
+		await store.put(updateScript);
+		dispatch({ type: SAVE_SCRIPT_SUCCESS, payload: { targetScript: updateScript } })
+		Router.go('/');
+	} catch (error) {
+		console.error('Error:', error);
+		dispatch({ type: SAVE_SCRIPT_ERROR, payload: { error: error } })
+	} finally {
+		db.close();
+	}
+
+
+}
+
 export interface ScriptsResult {
 	scripts: Array<Script>;
 }
 
 export interface RunResult {
 	result?: Object;
+	out?: string;
 	status: string;
 	message?: string;
+}
+
+export interface RunExecution {
+	result?: Object;
+	out?: string;
 }
 
 
@@ -204,5 +242,6 @@ export interface Script {
 	contents: string;
 	lastModified: string;
 }
+
 
 

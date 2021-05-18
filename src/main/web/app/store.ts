@@ -14,7 +14,7 @@ export const gceuDB = () => {
 	return openDB("gceDB", 1, {
 		upgrade(db, oldVersion) {
 			if (oldVersion == 0) {
-				let scriptsStore = db.createObjectStore('scripts', { keyPath: ['scriptId'] });
+				let scriptsStore = db.createObjectStore('scripts', { keyPath: 'scriptId', autoIncrement: true });
 				scriptsStore.createIndex("lastModified", "lastModified", { unique: false });				
 			}
 		},

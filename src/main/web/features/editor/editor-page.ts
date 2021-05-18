@@ -5,7 +5,7 @@ import {ifDefined} from 'lit/directives/if-defined.js';
 import { ViewElement } from '../../components/view';
 
 import { GCEStore } from '../../app/store';
-import { back } from './editor-actions';
+import { Script, back, save } from './editor-actions';
 
 import '../../components/editor';
 import { GroovyEditorElement } from '../../components/editor';
@@ -18,10 +18,13 @@ export class GroovyEditorPageElement extends ViewElement {
 	pageTitle = 'Editor';
 
 	@property({ type: Object })
-	targetScript: any = {};
+	targetScript?: Script;
 
 	@property({ type: Boolean })
 	modified= false;
+	
+	@property({ type: Boolean })
+	hasErrors= false;
 
 
 	@query('groovy-editor')
@@ -30,12 +33,14 @@ export class GroovyEditorPageElement extends ViewElement {
 	
 	constructor() {
 	    super();
-    	this.addEventListener('editor-update', (e: Event) => {this.modified = true; console.log(e)});
+    	this.addEventListener('editor-update', (e: Event) => {this.modified = true; });
+		this.addEventListener('editor-lint', (e: Event) => {this.hasErrors = (e as any).detail.errors.length > 0;});
   	}
 
 	
 	render() {		
-		const contents = ifDefined(this.targetScript && this.targetScript.contents ? atob (this.targetScript.contents): undefined);
+		const contents = this.targetScript && this.targetScript.contents ? atob (this.targetScript.contents): undefined;
+		const name = this.targetScript && this.targetScript.name ? this.targetScript.name: undefined;
 		return html`
 
 			${this.pageTitleTemplate}
@@ -49,17 +54,28 @@ export class GroovyEditorPageElement extends ViewElement {
 			
 				<div class="form-group">
     				<label for="scriptContent">Script</label>
-    				<groovy-editor .script=${contents} hintPath="/api/gce/hint"></groovy-editor>					
+    				<groovy-editor script-name=${ifDefined(name)} .script=${ifDefined(contents)}></groovy-editor>					
   				</div>	
 								
 				<div class="btn-group" role="group" aria-label="Run">			  		
-					<button ?disabled=${!this.modified} type="button" class="btn btn-primary mr-2" @click=${(e: MouseEvent)=> this.dispatch(back())}>Save</button>
-					<button ?disabled=${!!this.modified} type="button" class="btn btn-secondary mr-2" @click=${(e: MouseEvent)=> this.dispatch(back())}>Run</button>
+					<button ?disabled=${!this.modified || this.hasErrors } type="button" class="btn btn-primary mr-2" @click=${this.handleSave}>Save</button>
 					<button type="button" class="btn btn-secondary" @click=${(e: MouseEvent)=> this.dispatch(back())}>Back</button>	
 				</div>
 			</div>
 
     `;
+	}
+	
+	handleSave(e: MouseEvent){
+		if (this.groovyEditor && this.groovyEditor.validate()){
+			let updateScript = <Script>{
+				...this.targetScript,
+				lastModified: new Date().toISOString (),
+				contents: btoa(this.groovyEditor.script)
+			};
+			this.dispatch(save(updateScript));
+			this.modified = false;
+		}
 	}
 
 

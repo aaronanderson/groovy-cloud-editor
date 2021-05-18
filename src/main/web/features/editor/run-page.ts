@@ -6,7 +6,7 @@ import {property, customElement} from 'lit/decorators.js';
 import { ViewElement } from '../../components/view';
 
 import { GCEStore } from '../../app/store';
-import { back } from './editor-actions';
+import { RunExecution, back } from './editor-actions';
 
 
 
@@ -17,11 +17,18 @@ export class GroovyRunPageElement extends ViewElement {
 	pageTitle = 'Run';
 
 	@property({ type: Object })
-	runResult: any = {};
+	execution?: RunExecution;
 	
 	@property({ type: Object })
 	targetScript: any = {};
 
+
+	
+	static get styles() {
+		return [super.styles, css` 
+					
+					`];
+	}
 	
 	render() {
 
@@ -36,11 +43,17 @@ export class GroovyRunPageElement extends ViewElement {
     				<span>${this.targetScript?.name}</span>
 				 </div>
 				
-				${this.runResult? html `
-				 <div class="form-group">
-    				<label>Execution Result:</label>
-    				<span>${this.runResult instanceof String? this.runResult : JSON.stringify(this.runResult)}</span>
-  				</div>
+				${this.execution? html `
+					${this.execution.out? html `		
+					 <div class="form-group">
+	    				<label>Execution Output:</label>
+	    				<pre><code>${this.execution.out}</code></pre>
+	  				</div>`: undefined}
+					${this.execution.result? html `		
+					 <div class="form-group">
+	    				<label>Execution Result:</label>
+	    				<pre><code>${this.execution.result instanceof String? this.execution.result : JSON.stringify(this.execution.result,  null, 2)}</code></pre>
+	  				</div>`: undefined}					
 				`: undefined}
 				<div class="btn-group" role="group" aria-label="Run">			  		
 					<button type="button" class="btn btn-secondary" @click=${(e: MouseEvent)=> this.dispatch(back())}>Back</button>					
@@ -58,7 +71,7 @@ export class GroovyRunPageElement extends ViewElement {
 			this.loading = state.editor.loading;
 			this.errorMessage = state.editor.errorMessage;
 			this.targetScript = state.editor.targetScript;
-			this.runResult = state.editor.runResult; 
+			this.execution = state.editor.execution; 
 		}
 
 	}
