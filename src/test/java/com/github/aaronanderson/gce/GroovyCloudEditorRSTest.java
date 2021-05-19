@@ -1,10 +1,16 @@
 package com.github.aaronanderson.gce;
 
 import static io.restassured.RestAssured.given;
-import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.containsString;
+import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.notNullValue;
+import static org.hamcrest.Matchers.allOf;
+import static org.hamcrest.Matchers.greaterThan;
+import static org.hamcrest.Matchers.hasEntry;
+import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.jupiter.api.Assertions.fail;
+
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.Base64;
@@ -123,7 +129,11 @@ public class GroovyCloudEditorRSTest {
         }
         request.add("line", line);
         request.add("ch", ch);
-        request.add("sticky", sticky);
+        if (sticky != null) {
+            request.add("sticky", sticky);
+        } else {
+            request.addNull("sticky");
+        }
         return request.build().toString();
     }
 
@@ -131,30 +141,82 @@ public class GroovyCloudEditorRSTest {
     public void testHintNewVariable() throws IOException {
         given()
                 .when()
-                .body(buildHint("/scripts/hint-new-variable.groovy", 3, 14, "before"))
+                .body(buildHint("/scripts/hint-new-variable.groovy", 2, 14, "before"))
                 .contentType(ContentType.JSON)
-                .log().body()
+                //.log().body()
+                .post("/api/gce/hint")
+                .then()
+                .statusCode(200)
+                //.log().body()
+                .body("status", is("ok"),
+                        "hints.size()", is(0));
+    }
+
+    @Test
+    public void testHintNewVariableType() throws IOException {
+        given()
+                .when()
+                .body(buildHint("/scripts/hint-new-variable-type.groovy", 2, 16, "before"))
+                .contentType(ContentType.JSON)
+                //.log().body()
                 .post("/api/gce/hint")
                 .then()
                 .statusCode(200)
                 .log().body()
-                .body("status", is("ok"));
-        //        "result.value", is("Success"));
+                .body("status", is("ok"),
+                        "hints.size()", is(greaterThan(0)),
+                        "hints", hasItem(allOf(hasEntry("displayed", "java.lang.String()"), hasEntry("value", "String()"))));
+        //hasEntry("entered[0]", 10), hasEntry("entered[1]", 0)
     }
 
-    //@Test
+    @Test
     public void testHintNewVariablePartial() throws IOException {
         given()
                 .when()
-                .body(buildHint("/scripts/hint-new-variable-partial.groovy", 3, 18, "before"))
+                .body(buildHint("/scripts/hint-new-variable-partial.groovy", 2, 18, "before"))
                 .contentType(ContentType.JSON)
                 .log().body()
                 .post("/api/gce/hint")
                 .then()
                 .statusCode(200)
                 .log().body()
-                .body("status", is("ok"));
-        //        "result.value", is("Success"));
+                .body("status", is("ok"),
+                        "hints.size()", is(greaterThan(0)),
+                        "hints", hasItem(allOf(hasEntry("displayed", "java.lang.String()"), hasEntry("value", "String()"))));
+        //"hints[0].entered[0]", is(10), "hints[0].entered[1]", is(4),
+
+    }
+
+    @Test
+    public void testHintNewVariableConstructorParam() throws IOException {
+        given()
+                .when()
+                .body(buildHint("/scripts/hint-new-variable-constructor-param.groovy", 3, 23, "before"))
+                .contentType(ContentType.JSON)
+                .log().body()
+                .post("/api/gce/hint")
+                .then()
+                .statusCode(200)
+                .log().body()
+                .body("status", is("ok"),
+                        "hints.size()", is(greaterThan(0)),
+                        "hints", hasItem(allOf(hasEntry("displayed", "java.lang.String(byte[] strBytes)"), hasEntry("value", "String(strBytes)"))));
+    }
+
+    @Test
+    public void testHintMethodConstructor() throws IOException {
+        given()
+                .when()
+                .body(buildHint("/scripts/hint-method-constructor.groovy", 2, 44, "after"))
+                .contentType(ContentType.JSON)
+                .log().body()
+                .post("/api/gce/hint")
+                .then()
+                .statusCode(200)
+                .log().body()
+                .body("status", is("ok"),
+                        "hints.size()", is(greaterThan(0)),
+                        "hints", hasItem(allOf(hasEntry("displayed", "java.lang.String()"), hasEntry("value", "String()"))));
     }
 
     //@Test

@@ -1,4 +1,3 @@
 import javax.json.*;
-import java.io.ByteArrayInputStream;
 
-dev var = new Stri
+def var = new Stri

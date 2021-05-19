@@ -6,17 +6,19 @@ import java.io.StringReader;
 import java.io.StringWriter;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.Arrays;
 import java.util.Base64;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import javax.enterprise.context.RequestScoped;
 import javax.json.Json;
+import javax.json.JsonArray;
 import javax.json.JsonArrayBuilder;
 import javax.json.JsonNumber;
 import javax.json.JsonObject;
@@ -43,9 +45,13 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.github.aaronanderson.gce.AutoCompleteOperation.AutoCompleteOperationConfig;
+import com.github.aaronanderson.gce.AutoCompleteOperation.Hint;
+
 import groovy.lang.Binding;
 import groovy.lang.GroovyClassLoader;
 import groovy.lang.GroovyCodeSource;
+import groovy.lang.GroovyRuntimeException;
 import groovy.lang.GroovyShell;
 import groovy.lang.Script;
 
@@ -58,11 +64,20 @@ public class GroovyCloudEditorRS {
     static Logger logger = LoggerFactory.getLogger(GroovyCloudEditorRS.class);
     static Pattern NEW_CONSTRUCTOR = Pattern.compile("new\\s*(\\w*)\\s*($|\\))");
 
-    @ConfigProperty(name = "gce.importsBlacklist")
+    @ConfigProperty(name = "gce.run.importsBlacklist")
     List<String> importsBlacklist;
 
-    @ConfigProperty(name = "gce.starImportsBlacklist")
+    @ConfigProperty(name = "gce.run.starImportsBlacklist")
     List<String> starImportsBlacklist;
+
+    @ConfigProperty(name = "gce.scan.autoImport", defaultValue = "false")
+    boolean autoImport;
+
+    @ConfigProperty(name = "gce.scan.acceptPackages")
+    Optional<List<String>> acceptPackages;
+
+    @ConfigProperty(name = "gce.scan.rejectPackages")
+    Optional<List<String>> rejectPackages;
 
     @GET
     @Path("scripts")
@@ -202,8 +217,9 @@ public class GroovyCloudEditorRS {
             System.out.format("Hint Request: %d %d %s - %s\n%s\n", line.intValue(), ch.intValue(), sticky, name, scriptContents);
             GroovyClassLoader gcl = new GroovyClassLoader();
             JsonObjectBuilder result = Json.createObjectBuilder();
-            CompilerConfiguration cfg = new CompilerConfiguration();
-            AutoCompleteOperation autoCompleteOperation = new AutoCompleteOperation(line.intValue(), ch.intValue(), sticky);
+            AutoCompleteOperationConfig config = new AutoCompleteOperationConfig(line.intValue(), ch.intValue(), sticky);
+            config.withAutoImport(autoImport).withAcceptPackages(acceptPackages.orElse(Collections.EMPTY_LIST)).withAcceptPackages(acceptPackages.orElse(Collections.EMPTY_LIST));
+            AutoCompleteOperation autoCompleteOperation = new AutoCompleteOperation(config);
             //GroovyCodeSource codeSource = new GroovyCodeSource(scriptContents, name, "gce");
             //CompilationUnit compileUnit = new CompilationUnit(cfg, codeSource.getCodeSource(), gcl);
             //compileUnit.addSource(codeSource.getName(), codeSource.getScriptText());
@@ -236,12 +252,13 @@ public class GroovyCloudEditorRS {
                         try {
                             compileUnit.compile(Phases.CANONICALIZATION);
                         } catch (MultipleCompilationErrorsException me2) {
+                            me2.printStackTrace();
                             //ignore, unable to perform autocomplete.
                         }
                     }
                 }
             }
-            result.add("hints", autoCompleteOperation.hints());
+            result.add("hints", hintsJson(autoCompleteOperation.hints()));
             result.add("status", "ok");
             return Response.status(200).entity(result.build()).build();
         } catch (Throwable e) {
@@ -250,6 +267,18 @@ public class GroovyCloudEditorRS {
             // output.addFormData("status", status, MediaType.APPLICATION_JSON_TYPE);
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(status).build();
         }
+    }
+
+    private static JsonArray hintsJson(List<Hint> hints) {
+        JsonArrayBuilder hintsJson = Json.createArrayBuilder();
+        for (Hint hint : hints) {
+            JsonObjectBuilder hintJson = Json.createObjectBuilder();
+            hintJson.add("entered", Json.createArrayBuilder().add(hint.getEntered()[0]).add(hint.getEntered()[1]));
+            hintJson.add("displayed", hint.getDisplayed());
+            hintJson.add("value", hint.getValue());
+            hintsJson.add(hintJson);
+        }
+        return hintsJson.build();
     }
 
     private static JsonObject buildScript(String name) throws IOException {

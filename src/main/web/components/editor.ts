@@ -49,7 +49,7 @@ export class GroovyEditorElement extends LitElement {
 	set script(script: string) {
 		console.log("set script", script);
 		let oldVal = undefined;
-		if (script &&this.editor) {
+		if (script && this.editor) {
 			oldVal = this.editor.getValue();
 			this.editor.setValue(script);
 		} else {
@@ -131,15 +131,14 @@ export class GroovyEditorElement extends LitElement {
 		let start = token.start;
 		let end = cur.ch;
 
-
 		let word = token.string.slice(0, end - start);
+
 		const hints: Hints = {
 			list: [],
 			from: CodeMirror.Pos(cur.line, start),
 			to: CodeMirror.Pos(cur.line, end),
 		};
 		console.log("hint requested", cur, word, token, start, end);
-
 		//at least two options are needed to prompt otherwise a single value is autocompleted.
 		hints.list.push({
 			displayText: "displayText",
@@ -224,10 +223,40 @@ export class GroovyEditorElement extends LitElement {
 			},
 			body: JSON.stringify(hintRequest)
 		});
-		const hintResult: HintResponse = await response.json();
 		if (!response.ok) {
 			throw Error(response.statusText);
 		}
+		const hintResult: HintResponse = await response.json();
+		for (let hint of hintResult.hints) {
+			hints.list.push({
+				displayText: hint.displayed,
+				text: hint.value,
+				render: (element, data, cur) => {
+					console.log("render hint", cm, self, data);
+					if (hint.entered[1] > 0) {
+						let displayedValue = element.appendChild(document.createElement("span"));
+						displayedValue.classList.add("CodeMirror-hint-arg");
+						displayedValue.textContent = hint.displayed.substring(0, hint.entered[0]);
+
+						let enteredValue = element.appendChild(document.createElement("span"));
+						enteredValue.classList.add("CodeMirror-hint-entered");
+						enteredValue.textContent = hint.displayed.substring(hint.entered[0], hint.entered[0] + hint.entered[1]);
+
+						displayedValue = element.appendChild(document.createElement("span"));
+						displayedValue.classList.add("CodeMirror-hint-arg");
+						displayedValue.textContent = hint.displayed.substring(hint.entered[0] + hint.entered[1]);
+
+					} else {
+						let displayedValue = element.appendChild(document.createElement("span"));
+						displayedValue.classList.add("CodeMirror-hint-arg");
+						displayedValue.textContent = hint.displayed;
+					}
+
+				},
+				//hint: (cm, self, data) => {console.log("apply hint", cm, self, data);},
+			});
+		}
+
 
 		return hints;
 
@@ -291,6 +320,14 @@ export interface HintRequest {
 }
 
 export interface HintResponse {
+	hints: GCEHint[];
+
+}
+
+export interface GCEHint {
+	entered: number[];
+	displayed: string;
+	value: string;
 
 }
 

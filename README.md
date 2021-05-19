@@ -3,6 +3,33 @@ Inspired from [codemirror-latex-hint](https://github.com/jun-sheaf/codemirror-la
 
 TODO: Update to CodeMirror 6.0. However this will require writing a [custom grammer](https://lezer.codemirror.net/docs/guide/#building-a-grammar) for groovy using [Lezer](https://lezer.codemirror.net/docs/guide/#writing-a-grammar), similar to the [Java](https://github.com/lezer-parser/java/blob/master/src/java.grammar) one. This is no small effort.
 
+develop, validate, run, store
+
+develop
+Code Mirror
+Hint
+
+Validate
+Lint 
+
+Run
+
+Store
+
+
+
+Key Components
+
+Security
+
+Performance
+
+Future enhancements 
+Auto-import - Incomplete initial support. 
+
+Architecture
+
+
 ```
 import {
 	...

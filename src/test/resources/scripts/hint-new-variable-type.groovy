@@ -1,3 +1,3 @@
 import javax.json.*;
 
-def var = new 
+String var = new 
