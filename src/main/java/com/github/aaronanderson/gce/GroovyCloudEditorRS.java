@@ -62,7 +62,8 @@ import groovy.lang.Script;
 public class GroovyCloudEditorRS {
 
     static Logger logger = LoggerFactory.getLogger(GroovyCloudEditorRS.class);
-    static Pattern NEW_CONSTRUCTOR = Pattern.compile("new\\s*(\\w*)\\s*($|\\))");
+    static Pattern NEW_CONSTRUCTOR = Pattern.compile("new\\s*(\\w*)\\s*($|\\))", Pattern.MULTILINE);
+    static Pattern METHOD = Pattern.compile("\\([^)]*$", Pattern.MULTILINE);
 
     @ConfigProperty(name = "gce.run.importsBlacklist")
     List<String> importsBlacklist;
@@ -229,32 +230,14 @@ public class GroovyCloudEditorRS {
             try {
                 compileUnit.compile(Phases.CANONICALIZATION);
             } catch (MultipleCompilationErrorsException me) {
+                //me.printStackTrace();
                 if (me.getErrorCollector().getErrorCount() == 1) {
+                    //adjust source so that it compiles
                     //visitor.visitScriptStatements(ctx.scriptStatements())
                     List<String> lines = IOUtils.readLines(new StringReader(scriptContents));
-                    String srcLine = lines.get(line.intValue());
-                    Matcher m = NEW_CONSTRUCTOR.matcher(srcLine);
-                    if (m.find()) {
-                        StringBuilder modifedSrc = new StringBuilder(lines.get(line.intValue()));
-                        String constructorHint = m.group(1);
-                        int start = m.start(1);
-                        int end = m.end(1);
-
-                        modifedSrc.replace(start, end, "Object()");
-                        System.out.format("constructor hint \"%s\" %d %d %s->%s\n", constructorHint, start, end, srcLine, modifedSrc);
-                        lines.set(line.intValue(), modifedSrc.toString());
-                        autoCompleteOperation.setConstructorHint(constructorHint);
-
-                        String newScript = lines.stream().collect(Collectors.joining("\n"));
-                        compileUnit = new CompilationUnit(gcl);
-                        compileUnit.addSource(name, newScript);
-                        compileUnit.addPhaseOperation(autoCompleteOperation, Phases.CANONICALIZATION);
-                        try {
-                            compileUnit.compile(Phases.CANONICALIZATION);
-                        } catch (MultipleCompilationErrorsException me2) {
-                            me2.printStackTrace();
-                            //ignore, unable to perform autocomplete.
-                        }
+                    boolean handled = constructorHint(name, lines, line.intValue(), autoCompleteOperation, gcl);
+                    if (!handled) {
+                        handled = methodHint(name, lines, line.intValue(), autoCompleteOperation, gcl);
                     }
                 }
             }
@@ -267,6 +250,50 @@ public class GroovyCloudEditorRS {
             // output.addFormData("status", status, MediaType.APPLICATION_JSON_TYPE);
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(status).build();
         }
+    }
+
+    private boolean constructorHint(String name, List<String> lines, int lineNumber, AutoCompleteOperation autoCompleteOperation, GroovyClassLoader gcl) {
+        String srcLine = lines.get(lineNumber);
+        Matcher m = NEW_CONSTRUCTOR.matcher(srcLine);
+        if (m.find()) {
+            StringBuilder modifedSrc = new StringBuilder(lines.get(lineNumber));
+            String constructorHint = m.group(1);
+            int start = m.start(1);
+            int end = m.end(1);
+            modifedSrc.replace(start, end, "Object()");
+            System.out.format("constructor hint \"%s\" %d %d %s->%s\n", constructorHint, start, end, srcLine, modifedSrc);
+            lines.set(lineNumber, modifedSrc.toString());
+            autoCompleteOperation.setConstructorHint(constructorHint);
+            return compile(name, lines, autoCompleteOperation, gcl);
+        }
+        return false;
+    }
+
+    private boolean methodHint(String name, List<String> lines, int lineNumber, AutoCompleteOperation autoCompleteOperation, GroovyClassLoader gcl) {
+        String srcLine = lines.get(lineNumber);
+        Matcher m = METHOD.matcher(srcLine);
+        if (m.find()) {
+            StringBuilder modifedSrc = new StringBuilder(lines.get(lineNumber));
+            modifedSrc.append(")");
+            lines.set(lineNumber, modifedSrc.toString());
+            return compile(name, lines, autoCompleteOperation, gcl);
+        }
+        return false;
+    }
+
+    private boolean compile(String name, List<String> lines, AutoCompleteOperation autoCompleteOperation, GroovyClassLoader gcl) {
+        String newScript = lines.stream().collect(Collectors.joining("\n"));
+        CompilationUnit compileUnit = new CompilationUnit(gcl);
+        compileUnit.addSource(name, newScript);
+        compileUnit.addPhaseOperation(autoCompleteOperation, Phases.CANONICALIZATION);
+        try {
+            compileUnit.compile(Phases.CANONICALIZATION);
+            return true;
+        } catch (MultipleCompilationErrorsException me2) {
+            me2.printStackTrace();
+            //ignore, unable to perform autocomplete.
+        }
+        return false;
     }
 
     private static JsonArray hintsJson(List<Hint> hints) {

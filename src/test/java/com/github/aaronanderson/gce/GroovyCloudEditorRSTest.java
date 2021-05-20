@@ -27,10 +27,10 @@ import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.ContentType;
 
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
-@QuarkusTest
+@QuarkusTest()
 public class GroovyCloudEditorRSTest {
 
-    //@Test
+    @Test
     public void testScripts() {
         given()
                 .when().get("/api/gce/scripts")
@@ -57,7 +57,7 @@ public class GroovyCloudEditorRSTest {
         return request.build().toString();
     }
 
-    //@Test
+    @Test
     public void testSuccessRun() throws IOException {
         given()
                 .when()
@@ -72,20 +72,20 @@ public class GroovyCloudEditorRSTest {
                         "result.value", is("Success"));
     }
 
-    //@Test
+    @Test
     public void testInsecureRun() throws IOException {
         given()
                 .when()
                 .body(buildScript("/scripts/run-insecure.groovy", true))
                 .contentType(ContentType.JSON)
+                //.log().body()
                 .post("/api/gce/run")
                 .then()
-                .statusCode(500)
-                .log().body();
-
+                //.log().body()
+                .statusCode(500);
     }
 
-    // @Test
+    @Test
     public void testValidate() throws IOException {
         given()
                 .when()
@@ -99,17 +99,17 @@ public class GroovyCloudEditorRSTest {
                 .body("status", is("ok"));
     }
 
-    //@Test
+    @Test
     public void testValidateError() throws IOException {
         given()
                 .when()
                 .body(buildScript("/scripts/validate-error.groovy", false))
                 .contentType(ContentType.JSON)
-                .log().body()
+                //.log().body()
                 .post("/api/gce/validate")
                 .then()
                 .statusCode(200)
-                .log().body()
+                //.log().body()
                 .body("status", is("ok"),
                         "errors.size()", is(1),
                         "errors[0].sline", is(5),
@@ -138,7 +138,7 @@ public class GroovyCloudEditorRSTest {
     }
 
     @Test
-    public void testHintNewVariable() throws IOException {
+    public void testHintVariable() throws IOException {
         given()
                 .when()
                 .body(buildHint("/scripts/hint-new-variable.groovy", 2, 14, "before"))
@@ -153,7 +153,7 @@ public class GroovyCloudEditorRSTest {
     }
 
     @Test
-    public void testHintNewVariableType() throws IOException {
+    public void testHintVariableType() throws IOException {
         given()
                 .when()
                 .body(buildHint("/scripts/hint-new-variable-type.groovy", 2, 16, "before"))
@@ -162,7 +162,7 @@ public class GroovyCloudEditorRSTest {
                 .post("/api/gce/hint")
                 .then()
                 .statusCode(200)
-                .log().body()
+                //.log().body()
                 .body("status", is("ok"),
                         "hints.size()", is(greaterThan(0)),
                         "hints", hasItem(allOf(hasEntry("displayed", "java.lang.String()"), hasEntry("value", "String()"))));
@@ -170,16 +170,16 @@ public class GroovyCloudEditorRSTest {
     }
 
     @Test
-    public void testHintNewVariablePartial() throws IOException {
+    public void testHintVariablePartial() throws IOException {
         given()
                 .when()
                 .body(buildHint("/scripts/hint-new-variable-partial.groovy", 2, 18, "before"))
                 .contentType(ContentType.JSON)
-                .log().body()
+                //.log().body()
                 .post("/api/gce/hint")
                 .then()
                 .statusCode(200)
-                .log().body()
+                //.log().body()
                 .body("status", is("ok"),
                         "hints.size()", is(greaterThan(0)),
                         "hints", hasItem(allOf(hasEntry("displayed", "java.lang.String()"), hasEntry("value", "String()"))));
@@ -188,16 +188,16 @@ public class GroovyCloudEditorRSTest {
     }
 
     @Test
-    public void testHintNewVariableConstructorParam() throws IOException {
+    public void testHintVariableConstructorParam() throws IOException {
         given()
                 .when()
                 .body(buildHint("/scripts/hint-new-variable-constructor-param.groovy", 3, 23, "before"))
                 .contentType(ContentType.JSON)
-                .log().body()
+                //.log().body()
                 .post("/api/gce/hint")
                 .then()
                 .statusCode(200)
-                .log().body()
+                //.log().body()
                 .body("status", is("ok"),
                         "hints.size()", is(greaterThan(0)),
                         "hints", hasItem(allOf(hasEntry("displayed", "java.lang.String(byte[] strBytes)"), hasEntry("value", "String(strBytes)"))));
@@ -209,6 +209,70 @@ public class GroovyCloudEditorRSTest {
                 .when()
                 .body(buildHint("/scripts/hint-method-constructor.groovy", 2, 44, "after"))
                 .contentType(ContentType.JSON)
+                //.log().body()
+                .post("/api/gce/hint")
+                .then()
+                .statusCode(200)
+                //.log().body()
+                .body("status", is("ok"),
+                        "hints.size()", is(greaterThan(0)),
+                        "hints", hasItem(allOf(hasEntry("displayed", "java.lang.String()"), hasEntry("value", "String()"))));
+    }
+
+    @Test
+    public void testHintMethodParam() throws IOException {
+        given()
+                .when()
+                .body(buildHint("/scripts/hint-method-param.groovy", 5, 24, "after"))
+                .contentType(ContentType.JSON)
+                //.log().body()
+                .post("/api/gce/hint")
+                .then()
+                .statusCode(200)
+                //.log().body()
+                .body("status", is("ok"),
+                        "hints.size()", is(greaterThan(0)),
+                        "hints", hasItem(allOf(hasEntry("displayed", "concat(String str1)"), hasEntry("value", "concat(str1)"))));
+    }
+
+    @Test
+    public void testHintMethodParam2() throws IOException {
+        given()
+                .when()
+                .body(buildHint("/scripts/hint-method-param2.groovy", 5, 24, "before"))
+                .contentType(ContentType.JSON)
+                //.log().body()
+                .post("/api/gce/hint")
+                .then()
+                .statusCode(200)
+                .log().body()
+                .body("status", is("ok"),
+                        "hints.size()", is(greaterThan(0)),
+                        "hints", hasItem(allOf(hasEntry("displayed", "concat(String str1)"), hasEntry("value", "concat(str1)"))));
+    }
+
+    @Test
+    public void testHintMethodParam3() throws IOException {
+        given()
+                .when()
+                .body(buildHint("/scripts/hint-method-param3.groovy", 4, 20, "before"))
+                .contentType(ContentType.JSON)
+                //.log().body()
+                .post("/api/gce/hint")
+                .then()
+                .statusCode(200)
+                .log().body()
+                .body("status", is("ok"),
+                        "hints.size()", is(greaterThan(0)),
+                        "hints", hasItem(allOf(hasEntry("displayed", "delete(int 0, int len)"), hasEntry("value", "delete(0, len)"))));
+    }
+
+    //@Test
+    public void testHintFunction() throws IOException {
+        given()
+                .when()
+                .body(buildHint("/scripts/hint-function.groovy", 2, 3, "before"))
+                .contentType(ContentType.JSON)
                 .log().body()
                 .post("/api/gce/hint")
                 .then()
@@ -216,37 +280,7 @@ public class GroovyCloudEditorRSTest {
                 .log().body()
                 .body("status", is("ok"),
                         "hints.size()", is(greaterThan(0)),
-                        "hints", hasItem(allOf(hasEntry("displayed", "java.lang.String()"), hasEntry("value", "String()"))));
-    }
-
-    //@Test
-    public void testHintNewMethodParam() throws IOException {
-        given()
-                .when()
-                .body(buildHint("/scripts/hint-new-method-param.groovy", 3, 18, "before"))
-                .contentType(ContentType.JSON)
-                .log().body()
-                .post("/api/gce/hint")
-                .then()
-                .statusCode(200)
-                .log().body()
-                .body("status", is("ok"));
-        //        "result.value", is("Success"));
-    }
-
-    //@Test
-    public void testHintNewMethodParamPartial() throws IOException {
-        given()
-                .when()
-                .body(buildHint("/scripts/hint-new-method-param-partial.groovy", 3, 18, "before"))
-                .contentType(ContentType.JSON)
-                .log().body()
-                .post("/api/gce/hint")
-                .then()
-                .statusCode(200)
-                .log().body()
-                .body("status", is("ok"));
-        //        "result.value", is("Success"));
+                        "hints", hasItem(allOf(hasEntry("displayed", "indexOf(int 0, int len)"), hasEntry("value", "indexOf(0, len)"))));
     }
 
     //@Test
@@ -255,11 +289,11 @@ public class GroovyCloudEditorRSTest {
                 .when()
                 .body(buildHint("/scripts/hint-field.groovy", 3, 18, "before"))
                 .contentType(ContentType.JSON)
-                .log().body()
+                //.log().body()
                 .post("/api/gce/hint")
                 .then()
                 .statusCode(200)
-                .log().body()
+                //.log().body()
                 .body("status", is("ok"));
         //        "result.value", is("Success"));
     }
@@ -270,11 +304,11 @@ public class GroovyCloudEditorRSTest {
                 .when()
                 .body(buildHint("/scripts/hint-field-partial.groovy", 3, 18, "before"))
                 .contentType(ContentType.JSON)
-                .log().body()
+                //.log().body()
                 .post("/api/gce/hint")
                 .then()
                 .statusCode(200)
-                .log().body()
+                //.log().body()
                 .body("status", is("ok"));
         //        "result.value", is("Success"));
     }
@@ -285,11 +319,11 @@ public class GroovyCloudEditorRSTest {
                 .when()
                 .body(buildHint("/scripts/hint-method.groovy", 3, 18, "before"))
                 .contentType(ContentType.JSON)
-                .log().body()
+                //.log().body()
                 .post("/api/gce/hint")
                 .then()
                 .statusCode(200)
-                .log().body()
+                //.log().body()
                 .body("status", is("ok"));
         //        "result.value", is("Success"));
     }
@@ -300,11 +334,11 @@ public class GroovyCloudEditorRSTest {
                 .when()
                 .body(buildHint("/scripts/hint-method-partial.groovy", 3, 18, "before"))
                 .contentType(ContentType.JSON)
-                .log().body()
+                //.log().body()
                 .post("/api/gce/hint")
                 .then()
                 .statusCode(200)
-                .log().body()
+                //.log().body()
                 .body("status", is("ok"));
         //        "result.value", is("Success"));
     }

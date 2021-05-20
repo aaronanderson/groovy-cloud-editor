@@ -86,6 +86,7 @@ import io.github.classgraph.ClassInfoList;
 import io.github.classgraph.ClassRefTypeSignature;
 import io.github.classgraph.MethodInfo;
 import io.github.classgraph.MethodInfoList;
+import io.github.classgraph.MethodInfoList.MethodInfoFilter;
 import io.github.classgraph.MethodParameterInfo;
 import io.github.classgraph.ReferenceTypeSignature;
 import io.github.classgraph.ScanResult;
@@ -108,6 +109,21 @@ public class AutoCompleteOperation implements ISourceUnitOperation {
     private Map<TypeSignature, String> paramNameCache;
     private ClassGraph classGraph;
     private Set<String> ignoreVarNames;
+
+    private static final Map<Class<?>, Class<?>> WRAPPER_TYPES;
+    static {
+        WRAPPER_TYPES = new HashMap<Class<?>, Class<?>>();
+        WRAPPER_TYPES.put(int.class, Integer.class);
+        WRAPPER_TYPES.put(byte.class, Byte.class);
+        WRAPPER_TYPES.put(char.class, Character.class);
+        WRAPPER_TYPES.put(boolean.class, Boolean.class);
+        WRAPPER_TYPES.put(double.class, Double.class);
+        WRAPPER_TYPES.put(float.class, Float.class);
+        WRAPPER_TYPES.put(long.class, Long.class);
+        WRAPPER_TYPES.put(short.class, Short.class);
+        WRAPPER_TYPES.put(void.class, Void.class);
+        WRAPPER_TYPES.put(void.class, Void.class);
+    }
 
     public AutoCompleteOperation(AutoCompleteOperationConfig config) {
         this.config = config;
@@ -148,10 +164,12 @@ public class AutoCompleteOperation implements ISourceUnitOperation {
         Collections.reverse(targetVariableScopes);
         LinkedList<ASTNode> targetNodes = visitor.getTargetNodes();
         if (targetNodes.size() > 0) {
-            logger.info(String.format("Target %d ASTNodes found for line %d column %d", targetNodes.size(), config.getLine() + 1, config.getCh()));
+            int targetLine = config.getLine() + 1;
+            int targetColumn = config.getCh();
+            logger.info(String.format("Target %d ASTNodes found for line %d column %d", targetNodes.size(), targetLine, config.getCh()));
             while (targetNodes.size() > 0) {
                 ASTNode node = targetNodes.pop();
-                if (node.getLineNumber() <= config.getLine() + 1 && config.getLine() + 1 <= node.getLastLineNumber()) {
+                if ((node.getLineNumber() <= targetLine && targetLine <= node.getLastLineNumber()) && (node.getColumnNumber() <= targetColumn && targetColumn <= node.getLastColumnNumber())) {
                     ASTNode prevNode = null;
                     while (!targetNodes.isEmpty()) {
                         ASTNode currentNode = targetNodes.pop();
@@ -162,19 +180,22 @@ public class AutoCompleteOperation implements ISourceUnitOperation {
                             prevNode = currentNode;
                         }
                     }
-                    if (prevNode != null) {
-                        logger.info(String.format("Target ASTNode %s found for line %d-%d column %d-%d %s", node, node.getLineNumber(), node.getLastLineNumber(), node.getColumnNumber(), node.getLastColumnNumber(), node.getText()));
-                        logger.info(String.format("Prev   ASTNode %s found for line %d-%d column %d-%d %s", prevNode, prevNode.getLineNumber(), prevNode.getLastLineNumber(), prevNode.getColumnNumber(), prevNode.getLastColumnNumber(), prevNode.getText()));
-                        if (node instanceof ConstructorCallExpression) {
-                            ConstructorCallExpression constructor = (ConstructorCallExpression) node;
-                            if (prevNode instanceof VariableExpression) {
-                                newConstructorHint(constructor, (VariableExpression) prevNode);
-                            } else if (prevNode instanceof MethodCallExpression) {
-                                newConstructorHint(constructor, (MethodCallExpression) prevNode);
-                            }
 
-                        }
+                    logger.info(String.format("Target ASTNode %s found for line %d-%d column %d-%d %s", node, node.getLineNumber(), node.getLastLineNumber(), node.getColumnNumber(), node.getLastColumnNumber(), node.getText()));
+                    if (prevNode != null) {
+                        logger.info(String.format("Prev   ASTNode %s found for line %d-%d column %d-%d %s", prevNode, prevNode.getLineNumber(), prevNode.getLastLineNumber(), prevNode.getColumnNumber(), prevNode.getLastColumnNumber(), prevNode.getText()));
                     }
+                    if (node instanceof ConstructorCallExpression) {
+                        ConstructorCallExpression constructor = (ConstructorCallExpression) node;
+                        if (prevNode instanceof VariableExpression) {
+                            newConstructorHint(constructor, (VariableExpression) prevNode);
+                        } else if (prevNode instanceof MethodCallExpression) {
+                            newConstructorHint(constructor, (MethodCallExpression) prevNode);
+                        }
+                    } else if (node instanceof MethodCallExpression) {
+                        methodHint((MethodCallExpression) node);
+                    }
+
                     break;
                 }
             }
@@ -233,91 +254,171 @@ public class AutoCompleteOperation implements ISourceUnitOperation {
                     ClassInfo classInfo = scanResult.getClassInfo(varType.getName());
                     classInfoList = classInfoList.getAssignableTo(classInfo);
                 }
-
-                constructorHints(classInfoList);
-
+                constructorHints(classInfoList, (ArgumentListExpression) constructorNode.getArguments());
             }
         } else {
             logger.debug("Object class type and no constructor prefix, unable to provide specific hint.");
         }
-
     }
 
     private void newConstructorHint(ConstructorCallExpression constructorNode, MethodCallExpression methodNode) {
-        ConstantExpression methodReference = null;
         int constructorIndex = -1;
 
         ArgumentListExpression argumentExpressions = (ArgumentListExpression) methodNode.getArguments();
         for (int i = 0; i < argumentExpressions.getExpressions().size(); i++) {
             Expression e = argumentExpressions.getExpression(i);
             if (e == constructorNode) {
-                if (methodNode.getMethod() instanceof ConstantExpression) {
-                    methodReference = (ConstantExpression) methodNode.getMethod();
-                    constructorIndex = i;
-                }
-
+                constructorIndex = i;
             }
         }
-        System.out.format("%s\n", argumentExpressions);
-        //methodNode.getArguments().
-
-        if (methodReference != null || !constructorHint.isBlank()) {
+        if (!constructorHint.isBlank()) {
             try (ScanResult scanResult = classGraph.scan()) {
                 ClassInfoList classInfoList = scanResult.getAllClasses();
-                MethodInfoList methods = findMethods(methodReference, argumentExpressions, scanResult);
+                MethodInfoList methods = findMethods(methodNode, true, argumentExpressions, scanResult);
                 for (MethodInfo methodInfo : methods) {
                     MethodParameterInfo parameterInfo = methodInfo.getParameterInfo()[constructorIndex];
                     if (!constructorHint.isBlank()) {
                         classInfoList = classInfoList.filter(c -> c.getSimpleName().startsWith(constructorHint));
                     }
                     classInfoList = classInfoList.filter(c -> isAssignable(c.loadClass(), parameterInfo.getTypeSignatureOrTypeDescriptor()));
-                    constructorHints(classInfoList);
+                    constructorHints(classInfoList, (ArgumentListExpression) constructorNode.getArguments());
                 }
-
             }
         } else {
-            logger.debug("Object class type and no constructor prefix, unable to provide specific hint.");
+            logger.debug("No method parameter type data available, unable to provide specific hint.");
+        }
+    }
+
+    private void methodHint(MethodCallExpression methodNode) {
+        int parameterIndex = -1;
+        ArgumentListExpression argumentExpressions = (ArgumentListExpression) methodNode.getArguments();
+        int targetLine = config.getLine() + 1;
+        int targetColumn = config.getCh();
+        for (int i = 0; i < argumentExpressions.getExpressions().size(); i++) {
+            Expression e = argumentExpressions.getExpression(i);
+            if ((e.getLineNumber() <= targetLine && targetLine <= e.getLastLineNumber()) && (e.getColumnNumber() <= targetColumn && targetColumn <= e.getLastColumnNumber())) {
+                parameterIndex = i;
+            }
         }
 
-    }
-
-    private MethodInfoList findMethods(ConstantExpression methodReference, ArgumentListExpression argumentExpressions, ScanResult scanResult) {
-        ClassInfo classInfo = scanResult.getClassInfo(methodReference.getType().getName());
-        MethodInfoList methodList = classInfo.getMethodInfo().filter(m -> m.getName().equals((String) methodReference.getValue()) && m.getParameterInfo().length == argumentExpressions.getExpressions().size());
-        //TODO filter further by arguement types
-        return methodList;
-
-    }
-
-    private void constructorHints(ClassInfoList classInfoList) {
-        for (ClassInfo classInfo : classInfoList) {
-            int packageLength = classInfo.getPackageName() != null ? classInfo.getPackageName().length() + 1 : 0;
-            int[] entered = new int[] { packageLength, constructorHint.length() };
-            for (MethodInfo constInfo : classInfo.getConstructorInfo()) {
-                StringBuilder displayed = new StringBuilder(classInfo.getName()).append("(");
-                StringBuilder value = new StringBuilder(classInfo.getSimpleName()).append("(");
-                for (int i = 0; i < constInfo.getParameterInfo().length; i++) {
-                    MethodParameterInfo param = constInfo.getParameterInfo()[i];
-                    String paramName = null;
-                    paramName = variableNameByType(param.getTypeSignatureOrTypeDescriptor());
-                    if (paramName == null) {
-                        paramName = param.getName() != null ? param.getName() : "param" + (i > 0 ? i + 1 : "");
-                    }
-                    displayed.append(param.getTypeDescriptor().toStringWithSimpleNames()).append(" ").append(paramName);
-                    value.append(paramName);
-                    if (i != constInfo.getParameterInfo().length - 1) {
-                        displayed.append(", ");
-                        value.append(", ");
-                    }
-                }
-                displayed.append(")");
-                value.append(")");
-                hints.add(new Hint(entered, displayed.toString(), value.toString()));
+        String methodHint = ((ConstantExpression) methodNode.getMethod()).getText();
+        if (isFunction(methodNode)) {
+            System.out.format("Function %s\n", methodHint);
+        } else {
+            try (ScanResult scanResult = classGraph.scan()) {
+                MethodInfoList methodList = findMethods(methodNode, false, argumentExpressions, scanResult);
+                final int fparameterIndex = parameterIndex + 1; //method autocomplete should look beyond the existing arguments.
+                methodList = methodList.filter(m -> m.getParameterInfo().length > fparameterIndex);
+                methodHints(methodHint, methodList, argumentExpressions);
             }
         }
     }
 
-    private String variableNameByType(TypeSignature type) {
+    private static boolean isFunction(MethodCallExpression methodNode) {
+        if (methodNode.getObjectExpression() instanceof VariableExpression) {
+            return ((VariableExpression) methodNode.getObjectExpression()).getName().startsWith("this");
+        }
+        return false;
+    }
+
+    private MethodInfoList findMethods(MethodCallExpression methodNode, boolean exact, ArgumentListExpression argumentExpressions, ScanResult scanResult) {
+        ConstantExpression methodReference = (ConstantExpression) methodNode.getMethod();
+        String methodName = (String) methodReference.getValue();
+        Class<?> clazz = null;
+        if (methodNode.getObjectExpression() instanceof VariableExpression) {
+            VariableExpression varNode = (VariableExpression) methodNode.getObjectExpression();
+            if (varNode.getAccessedVariable() instanceof VariableExpression) {
+                clazz = varNode.getAccessedVariable().getType().getTypeClass();
+            } else {
+                clazz = methodNode.getObjectExpression().getType().getTypeClass();
+            }
+        } else if (methodNode.getObjectExpression() instanceof ConstructorCallExpression) {
+            clazz = methodNode.getObjectExpression().getType().getTypeClass();
+        }
+        if (clazz == null || Object.class.equals(clazz)) {
+            return MethodInfoList.emptyList();
+        }
+        ClassInfo classInfo = scanResult.getClassInfo(clazz.getName());
+        final int size = argumentExpressions.getExpressions().size();
+        MethodInfoFilter nameFilter = (m) -> m.getName().startsWith(methodName);
+        MethodInfoFilter countFilter = (m) -> exact ? m.getParameterInfo().length == size : m.getParameterInfo().length >= size;
+        MethodInfoFilter typeFilter = (m) -> {
+            if (m.isSynthetic()) {
+                return false;
+            }
+            boolean matches = true;
+            for (int i = 0; i < argumentExpressions.getExpressions().size(); i++) {
+                Expression arg = argumentExpressions.getExpression(i);
+                Class<?> argType = arg.getType().getTypeClass();
+                if (!Object.class.equals(argType)) {
+                    MethodParameterInfo paramInfo = m.getParameterInfo()[i];
+                    if (!isAssignable(argType, paramInfo.getTypeSignatureOrTypeDescriptor())) {
+                        matches = false;
+                    }
+                }
+            }
+            return matches;
+        };
+        return classInfo.getMethodInfo().filter(m -> nameFilter.accept(m) && countFilter.accept(m) && typeFilter.accept(m));
+    }
+
+    private void constructorHints(ClassInfoList classInfoList, ArgumentListExpression argumentExpressions) {
+        for (ClassInfo classInfo : classInfoList) {
+            for (MethodInfo constInfo : classInfo.getConstructorInfo()) {
+                addHint(constructorHint, classInfo.getName(), classInfo.getSimpleName(), constInfo, argumentExpressions);
+            }
+        }
+    }
+
+    private void methodHints(String methodHint, MethodInfoList methodList, ArgumentListExpression argumentExpressions) {
+        for (MethodInfo methodInfo : methodList) {
+            addHint(methodHint, methodInfo.getName(), methodInfo.getName(), methodInfo, argumentExpressions);
+
+        }
+    }
+
+    private void addHint(String hint, String displayed2, String value2, MethodInfo methodInfo, ArgumentListExpression argumentExpressions) {
+        StringBuilder displayed = new StringBuilder(displayed2).append("(");
+        StringBuilder value = new StringBuilder(value2).append("(");
+        for (int i = 0; i < methodInfo.getParameterInfo().length; i++) {
+            MethodParameterInfo param = methodInfo.getParameterInfo()[i];
+            String paramName = argumentParameterName(i, param.getTypeSignatureOrTypeDescriptor(), argumentExpressions);
+            if (paramName == null) {
+                paramName = variableParameterName(param.getTypeSignatureOrTypeDescriptor());
+            }
+            if (paramName == null) {
+                paramName = param.getName() != null ? param.getName() : "param" + (i > 0 ? i + 1 : "");
+            }
+            displayed.append(param.getTypeDescriptor().toStringWithSimpleNames()).append(" ").append(paramName);
+            value.append(paramName);
+            if (i != methodInfo.getParameterInfo().length - 1) {
+                displayed.append(", ");
+                value.append(", ");
+            }
+        }
+        displayed.append(")");
+        value.append(")");
+        int[] entered = new int[] { 0, hint.length() };
+        hints.add(new Hint(entered, displayed.toString(), value.toString()));
+
+    }
+
+    private String argumentParameterName(int paramIndex, TypeSignature type, ArgumentListExpression argumentExpressions) {
+        if (paramIndex < argumentExpressions.getExpressions().size()) {
+            Expression argument = argumentExpressions.getExpressions().get(paramIndex);
+            if (argument instanceof ConstantExpression) {
+                ConstantExpression constNode = (ConstantExpression) argument;
+                return constNode.getText();//display text will contain constants type but that is acceptable.
+            } else if (argument instanceof VariableExpression) {
+                VariableExpression varNode = (VariableExpression) argument;
+                return varNode.getName();
+            }
+        }
+
+        return null;
+    }
+
+    private String variableParameterName(TypeSignature type) {
         return paramNameCache.computeIfAbsent(type, k -> findScopedVariableName(type));
     }
 
@@ -347,7 +448,10 @@ public class AutoCompleteOperation implements ISourceUnitOperation {
             }
         } else if (type instanceof BaseTypeSignature) {
             BaseTypeSignature baseTypeSignature = (BaseTypeSignature) type;
-            if (clazz.isAssignableFrom(baseTypeSignature.getType())) {
+            if (clazz.isPrimitive()) {
+                clazz = WRAPPER_TYPES.get(clazz);
+            }
+            if (clazz.equals(WRAPPER_TYPES.get(baseTypeSignature.getType()))) {
                 return true;
             }
         } else if (type instanceof ClassRefTypeSignature) {
@@ -383,7 +487,6 @@ public class AutoCompleteOperation implements ISourceUnitOperation {
             System.arraycopy(args, 0, formatArgs, lineArgs.length, args.length);
 
             GroovyCloudEditorRS.logger.info(String.format("line: %d-%d %d-%d - %s\t" + format, formatArgs));
-
         }
     }
 

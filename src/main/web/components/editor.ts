@@ -253,7 +253,9 @@ export class GroovyEditorElement extends LitElement {
 					}
 
 				},
-				//hint: (cm, self, data) => {console.log("apply hint", cm, self, data);},
+				hint: (cm, self, data) => {
+					console.log("apply hint", cm, self, data);
+				},
 			});
 		}
 
