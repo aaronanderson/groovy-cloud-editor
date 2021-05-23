@@ -2,6 +2,6 @@ import javax.json.*;
 
 ad(
 
-def add(int x, int y) {
+def int add(int x, int y) {
     return x+y
 }

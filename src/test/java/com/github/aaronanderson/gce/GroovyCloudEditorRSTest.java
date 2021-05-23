@@ -232,7 +232,7 @@ public class GroovyCloudEditorRSTest {
                 //.log().body()
                 .body("status", is("ok"),
                         "hints.size()", is(greaterThan(0)),
-                        "hints", hasItem(allOf(hasEntry("displayed", "concat(String str1)"), hasEntry("value", "concat(str1)"))));
+                        "hints", hasItem(allOf(hasEntry("displayed", "concat(String str1) - String"), hasEntry("value", "concat(str1)"))));
     }
 
     @Test
@@ -248,7 +248,7 @@ public class GroovyCloudEditorRSTest {
                 //.log().body()
                 .body("status", is("ok"),
                         "hints.size()", is(greaterThan(0)),
-                        "hints", hasItem(allOf(hasEntry("displayed", "length()"), hasEntry("value", "length()"))));
+                        "hints", hasItem(allOf(hasEntry("displayed", "length() - int"), hasEntry("value", "length()"))));
     }
 
     @Test
@@ -264,7 +264,7 @@ public class GroovyCloudEditorRSTest {
                 //.log().body()
                 .body("status", is("ok"),
                         "hints.size()", is(greaterThan(0)),
-                        "hints", hasItem(allOf(hasEntry("displayed", "valueOf(Object param)"), hasEntry("value", "valueOf(param)"))));
+                        "hints", hasItem(allOf(hasEntry("displayed", "valueOf(Object param) - String"), hasEntry("value", "valueOf(param)"))));
     }
 
     @Test
@@ -280,7 +280,7 @@ public class GroovyCloudEditorRSTest {
                 //.log().body()
                 .body("status", is("ok"),
                         "hints.size()", is(greaterThan(0)),
-                        "hints", hasItem(allOf(hasEntry("displayed", "concat(String str1)"), hasEntry("value", "concat(str1)"))));
+                        "hints", hasItem(allOf(hasEntry("displayed", "concat(String str1) - String"), hasEntry("value", "concat(str1)"))));
     }
 
     @Test
@@ -296,7 +296,7 @@ public class GroovyCloudEditorRSTest {
                 //.log().body()
                 .body("status", is("ok"),
                         "hints.size()", is(greaterThan(0)),
-                        "hints", hasItem(allOf(hasEntry("displayed", "concat(String str1)"), hasEntry("value", "concat(str1)"))));
+                        "hints", hasItem(allOf(hasEntry("displayed", "concat(String str1) - String"), hasEntry("value", "concat(str1)"))));
     }
 
     @Test
@@ -312,7 +312,7 @@ public class GroovyCloudEditorRSTest {
                 //.log().body()
                 .body("status", is("ok"),
                         "hints.size()", is(greaterThan(0)),
-                        "hints", hasItem(allOf(hasEntry("displayed", "delete(int 0, int len)"), hasEntry("value", "delete(0, len)"))));
+                        "hints", hasItem(allOf(hasEntry("displayed", "delete(int 0, int len) - StringBuilder"), hasEntry("value", "delete(0, len)"))));
     }
 
     @Test
@@ -332,6 +332,54 @@ public class GroovyCloudEditorRSTest {
     }
 
     @Test
+    public void testImportSingle() throws IOException {
+        given()
+                .when()
+                .body(buildHint("/scripts/hint-import-single.groovy", 3, 33, "before"))
+                .contentType(ContentType.JSON)
+                //.log().body()
+                .post("/api/gce/hint")
+                .then()
+                .statusCode(200)
+                .log().body()
+                .body("status", is("ok"),
+                        "hints.size()", is(greaterThan(0)),
+                        "hints", hasItem(allOf(hasEntry("displayed", "createObjectBuilder() - JsonObjectBuilder"), hasEntry("value", "createObjectBuilder()"))));
+    }
+
+    @Test
+    public void testImportMethod() throws IOException {
+        given()
+                .when()
+                .body(buildHint("/scripts/hint-import-method.groovy", 2, 4, "before"))
+                .contentType(ContentType.JSON)
+                //.log().body()
+                .post("/api/gce/hint")
+                .then()
+                .statusCode(200)
+                //.log().body()
+                .body("status", is("ok"),
+                        "hints.size()", is(greaterThan(0)),
+                        "hints", hasItem(allOf(hasEntry("displayed", "abs(int param) - int"), hasEntry("value", "abs(param)"))));
+    }
+
+    @Test
+    public void testImportMethod2() throws IOException {
+        given()
+                .when()
+                .body(buildHint("/scripts/hint-import-method2.groovy", 2, 4, "before"))
+                .contentType(ContentType.JSON)
+                //.log().body()
+                .post("/api/gce/hint")
+                .then()
+                .statusCode(200)
+                //.log().body()
+                .body("status", is("ok"),
+                        "hints.size()", is(greaterThan(0)),
+                        "hints", hasItem(allOf(hasEntry("displayed", "abs(int param) - int"), hasEntry("value", "abs(param)"))));
+    }
+
+    @Test
     public void testHintFunction() throws IOException {
         given()
                 .when()
@@ -344,7 +392,7 @@ public class GroovyCloudEditorRSTest {
                 //.log().body()
                 .body("status", is("ok"),
                         "hints.size()", is(greaterThan(0)),
-                        "hints", hasItem(allOf(hasEntry("displayed", "add(int x, int y)"), hasEntry("value", "add(x, y)"))));
+                        "hints", hasItem(allOf(hasEntry("displayed", "add(int x, int y) - int"), hasEntry("value", "add(x, y)"))));
     }
 
     //@Test

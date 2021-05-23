@@ -93,7 +93,6 @@ class AutoCompleteParser {
         cfg.setPreviewFeatures(true);
         CompilationUnit compileUnit = new CompilationUnit(cfg);
         compileUnit.addSource(name, compileScript);
-        //compileUnit.addPhaseOperation(autoCompleteOperation, Phases.CANONICALIZATION);
         //first parse source to build AST tree.
         compileUnit.compile(Phases.CANONICALIZATION);
         //second check source for structures outside of the main block statement.
@@ -120,7 +119,6 @@ class AutoCompleteParser {
         i = compileUnit.iterator();
         while (i.hasNext()) {
             sourceUnits.add(i.next());
-            //this.autoCompleteAnalyzer.analyzeSource(autoCompleteRequest, sourceUnit);
         }
     }
 
