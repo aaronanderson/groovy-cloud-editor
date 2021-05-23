@@ -220,6 +220,54 @@ public class GroovyCloudEditorRSTest {
     }
 
     @Test
+    public void testHintMethod() throws IOException {
+        given()
+                .when()
+                .body(buildHint("/scripts/hint-method.groovy", 4, 5, "before"))
+                .contentType(ContentType.JSON)
+                //.log().body()
+                .post("/api/gce/hint")
+                .then()
+                .statusCode(200)
+                //.log().body()
+                .body("status", is("ok"),
+                        "hints.size()", is(greaterThan(0)),
+                        "hints", hasItem(allOf(hasEntry("displayed", "concat(String str1)"), hasEntry("value", "concat(str1)"))));
+    }
+
+    @Test
+    public void testHintMethodPartial() throws IOException {
+        given()
+                .when()
+                .body(buildHint("/scripts/hint-method-partial.groovy", 4, 8, "before"))
+                .contentType(ContentType.JSON)
+                //.log().body()
+                .post("/api/gce/hint")
+                .then()
+                .statusCode(200)
+                //.log().body()
+                .body("status", is("ok"),
+                        "hints.size()", is(greaterThan(0)),
+                        "hints", hasItem(allOf(hasEntry("displayed", "length()"), hasEntry("value", "length()"))));
+    }
+
+    @Test
+    public void testHintMethodStatic() throws IOException {
+        given()
+                .when()
+                .body(buildHint("/scripts/hint-method-static.groovy", 2, 14, "before"))
+                .contentType(ContentType.JSON)
+                //.log().body()
+                .post("/api/gce/hint")
+                .then()
+                .statusCode(200)
+                //.log().body()
+                .body("status", is("ok"),
+                        "hints.size()", is(greaterThan(0)),
+                        "hints", hasItem(allOf(hasEntry("displayed", "valueOf(Object param)"), hasEntry("value", "valueOf(param)"))));
+    }
+
+    @Test
     public void testHintMethodParam() throws IOException {
         given()
                 .when()
@@ -245,7 +293,7 @@ public class GroovyCloudEditorRSTest {
                 .post("/api/gce/hint")
                 .then()
                 .statusCode(200)
-                .log().body()
+                //.log().body()
                 .body("status", is("ok"),
                         "hints.size()", is(greaterThan(0)),
                         "hints", hasItem(allOf(hasEntry("displayed", "concat(String str1)"), hasEntry("value", "concat(str1)"))));
@@ -261,41 +309,42 @@ public class GroovyCloudEditorRSTest {
                 .post("/api/gce/hint")
                 .then()
                 .statusCode(200)
-                .log().body()
+                //.log().body()
                 .body("status", is("ok"),
                         "hints.size()", is(greaterThan(0)),
                         "hints", hasItem(allOf(hasEntry("displayed", "delete(int 0, int len)"), hasEntry("value", "delete(0, len)"))));
     }
 
-    //@Test
+    @Test
+    public void testHintField() throws IOException {
+        given()
+                .when()
+                .body(buildHint("/scripts/hint-field.groovy", 4, 21, "before"))
+                .contentType(ContentType.JSON)
+                //.log().body()
+                .post("/api/gce/hint")
+                .then()
+                .statusCode(200)
+                //.log().body()
+                .body("status", is("ok"),
+                        "hints.size()", is(greaterThan(0)),
+                        "hints", hasItem(allOf(hasEntry("displayed", "Comparator CASE_INSENSITIVE_ORDER"), hasEntry("value", "CASE_INSENSITIVE_ORDER"))));
+    }
+
+    @Test
     public void testHintFunction() throws IOException {
         given()
                 .when()
                 .body(buildHint("/scripts/hint-function.groovy", 2, 3, "before"))
                 .contentType(ContentType.JSON)
-                .log().body()
+                //.log().body()
                 .post("/api/gce/hint")
                 .then()
                 .statusCode(200)
-                .log().body()
+                //.log().body()
                 .body("status", is("ok"),
                         "hints.size()", is(greaterThan(0)),
-                        "hints", hasItem(allOf(hasEntry("displayed", "indexOf(int 0, int len)"), hasEntry("value", "indexOf(0, len)"))));
-    }
-
-    //@Test
-    public void testHintField() throws IOException {
-        given()
-                .when()
-                .body(buildHint("/scripts/hint-field.groovy", 3, 18, "before"))
-                .contentType(ContentType.JSON)
-                //.log().body()
-                .post("/api/gce/hint")
-                .then()
-                .statusCode(200)
-                //.log().body()
-                .body("status", is("ok"));
-        //        "result.value", is("Success"));
+                        "hints", hasItem(allOf(hasEntry("displayed", "add(int x, int y)"), hasEntry("value", "add(x, y)"))));
     }
 
     //@Test
@@ -313,33 +362,4 @@ public class GroovyCloudEditorRSTest {
         //        "result.value", is("Success"));
     }
 
-    //@Test
-    public void testHintMethod() throws IOException {
-        given()
-                .when()
-                .body(buildHint("/scripts/hint-method.groovy", 3, 18, "before"))
-                .contentType(ContentType.JSON)
-                //.log().body()
-                .post("/api/gce/hint")
-                .then()
-                .statusCode(200)
-                //.log().body()
-                .body("status", is("ok"));
-        //        "result.value", is("Success"));
-    }
-
-    //@Test
-    public void testHintMethodPartial() throws IOException {
-        given()
-                .when()
-                .body(buildHint("/scripts/hint-method-partial.groovy", 3, 18, "before"))
-                .contentType(ContentType.JSON)
-                //.log().body()
-                .post("/api/gce/hint")
-                .then()
-                .statusCode(200)
-                //.log().body()
-                .body("status", is("ok"));
-        //        "result.value", is("Success"));
-    }
 }

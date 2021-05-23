@@ -2,7 +2,6 @@ package com.github.aaronanderson.gce;
 
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.io.StringReader;
 import java.io.StringWriter;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
@@ -12,10 +11,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
+import javax.annotation.PostConstruct;
+import javax.annotation.PreDestroy;
 import javax.enterprise.context.RequestScoped;
 import javax.json.Json;
 import javax.json.JsonArray;
@@ -45,13 +43,9 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.github.aaronanderson.gce.AutoCompleteOperation.AutoCompleteOperationConfig;
-import com.github.aaronanderson.gce.AutoCompleteOperation.Hint;
-
 import groovy.lang.Binding;
 import groovy.lang.GroovyClassLoader;
 import groovy.lang.GroovyCodeSource;
-import groovy.lang.GroovyRuntimeException;
 import groovy.lang.GroovyShell;
 import groovy.lang.Script;
 
@@ -62,8 +56,6 @@ import groovy.lang.Script;
 public class GroovyCloudEditorRS {
 
     static Logger logger = LoggerFactory.getLogger(GroovyCloudEditorRS.class);
-    static Pattern NEW_CONSTRUCTOR = Pattern.compile("new\\s*(\\w*)\\s*($|\\))", Pattern.MULTILINE);
-    static Pattern METHOD = Pattern.compile("\\([^)]*$", Pattern.MULTILINE);
 
     @ConfigProperty(name = "gce.run.importsBlacklist")
     List<String> importsBlacklist;
@@ -79,6 +71,22 @@ public class GroovyCloudEditorRS {
 
     @ConfigProperty(name = "gce.scan.rejectPackages")
     Optional<List<String>> rejectPackages;
+
+    private AutoCompleteAnalyzer autoCompleteAnalyzer;
+
+    @PostConstruct
+    public void init() {
+        autoCompleteAnalyzer = new AutoCompleteAnalyzer(autoImport, acceptPackages.orElse(Collections.EMPTY_LIST), rejectPackages.orElse(Collections.EMPTY_LIST));
+    }
+
+    @PreDestroy
+    public void destroy() {
+        try {
+            autoCompleteAnalyzer.close();
+        } catch (Exception e) {
+
+        }
+    }
 
     @GET
     @Path("scripts")
@@ -114,8 +122,10 @@ public class GroovyCloudEditorRS {
             binding.setVariable("ctx", context);
 
             CompilerConfiguration config = new CompilerConfiguration();
-            config.setDebug(true);
-            config.setVerbose(true);
+            config.setParameters(true);
+            config.setPreviewFeatures(true);
+            //config.setDebug(true);
+            //config.setVerbose(true);
             SecureASTCustomizer customizer = new SecureASTCustomizer();
             //Do not allow file access.
             //As an alternative to the SecureASTCustomizer for additional security guarantees when executing untrusted external code 
@@ -216,32 +226,10 @@ public class GroovyCloudEditorRS {
             String scriptContents = request.getString("script");
 
             System.out.format("Hint Request: %d %d %s - %s\n%s\n", line.intValue(), ch.intValue(), sticky, name, scriptContents);
-            GroovyClassLoader gcl = new GroovyClassLoader();
             JsonObjectBuilder result = Json.createObjectBuilder();
-            AutoCompleteOperationConfig config = new AutoCompleteOperationConfig(line.intValue(), ch.intValue(), sticky);
-            config.withAutoImport(autoImport).withAcceptPackages(acceptPackages.orElse(Collections.EMPTY_LIST)).withAcceptPackages(acceptPackages.orElse(Collections.EMPTY_LIST));
-            AutoCompleteOperation autoCompleteOperation = new AutoCompleteOperation(config);
-            //GroovyCodeSource codeSource = new GroovyCodeSource(scriptContents, name, "gce");
-            //CompilationUnit compileUnit = new CompilationUnit(cfg, codeSource.getCodeSource(), gcl);
-            //compileUnit.addSource(codeSource.getName(), codeSource.getScriptText());
-            CompilationUnit compileUnit = new CompilationUnit(gcl);
-            compileUnit.addSource(name, scriptContents);
-            compileUnit.addPhaseOperation(autoCompleteOperation, Phases.CANONICALIZATION);
-            try {
-                compileUnit.compile(Phases.CANONICALIZATION);
-            } catch (MultipleCompilationErrorsException me) {
-                //me.printStackTrace();
-                if (me.getErrorCollector().getErrorCount() == 1) {
-                    //adjust source so that it compiles
-                    //visitor.visitScriptStatements(ctx.scriptStatements())
-                    List<String> lines = IOUtils.readLines(new StringReader(scriptContents));
-                    boolean handled = constructorHint(name, lines, line.intValue(), autoCompleteOperation, gcl);
-                    if (!handled) {
-                        handled = methodHint(name, lines, line.intValue(), autoCompleteOperation, gcl);
-                    }
-                }
-            }
-            result.add("hints", hintsJson(autoCompleteOperation.hints()));
+            AutoCompleteRequest hintRequest = new AutoCompleteRequest(line.intValue(), ch.intValue(), sticky);
+            List<Hint> hints = autoCompleteAnalyzer.analyze(hintRequest, name, scriptContents);
+            result.add("hints", hintsJson(hints));
             result.add("status", "ok");
             return Response.status(200).entity(result.build()).build();
         } catch (Throwable e) {
@@ -250,50 +238,6 @@ public class GroovyCloudEditorRS {
             // output.addFormData("status", status, MediaType.APPLICATION_JSON_TYPE);
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(status).build();
         }
-    }
-
-    private boolean constructorHint(String name, List<String> lines, int lineNumber, AutoCompleteOperation autoCompleteOperation, GroovyClassLoader gcl) {
-        String srcLine = lines.get(lineNumber);
-        Matcher m = NEW_CONSTRUCTOR.matcher(srcLine);
-        if (m.find()) {
-            StringBuilder modifedSrc = new StringBuilder(lines.get(lineNumber));
-            String constructorHint = m.group(1);
-            int start = m.start(1);
-            int end = m.end(1);
-            modifedSrc.replace(start, end, "Object()");
-            System.out.format("constructor hint \"%s\" %d %d %s->%s\n", constructorHint, start, end, srcLine, modifedSrc);
-            lines.set(lineNumber, modifedSrc.toString());
-            autoCompleteOperation.setConstructorHint(constructorHint);
-            return compile(name, lines, autoCompleteOperation, gcl);
-        }
-        return false;
-    }
-
-    private boolean methodHint(String name, List<String> lines, int lineNumber, AutoCompleteOperation autoCompleteOperation, GroovyClassLoader gcl) {
-        String srcLine = lines.get(lineNumber);
-        Matcher m = METHOD.matcher(srcLine);
-        if (m.find()) {
-            StringBuilder modifedSrc = new StringBuilder(lines.get(lineNumber));
-            modifedSrc.append(")");
-            lines.set(lineNumber, modifedSrc.toString());
-            return compile(name, lines, autoCompleteOperation, gcl);
-        }
-        return false;
-    }
-
-    private boolean compile(String name, List<String> lines, AutoCompleteOperation autoCompleteOperation, GroovyClassLoader gcl) {
-        String newScript = lines.stream().collect(Collectors.joining("\n"));
-        CompilationUnit compileUnit = new CompilationUnit(gcl);
-        compileUnit.addSource(name, newScript);
-        compileUnit.addPhaseOperation(autoCompleteOperation, Phases.CANONICALIZATION);
-        try {
-            compileUnit.compile(Phases.CANONICALIZATION);
-            return true;
-        } catch (MultipleCompilationErrorsException me2) {
-            me2.printStackTrace();
-            //ignore, unable to perform autocomplete.
-        }
-        return false;
     }
 
     private static JsonArray hintsJson(List<Hint> hints) {
@@ -317,4 +261,5 @@ public class GroovyCloudEditorRS {
         script.add("lastModified", ZonedDateTime.now().format(DateTimeFormatter.ISO_INSTANT));
         return script.build();
     }
+
 }
