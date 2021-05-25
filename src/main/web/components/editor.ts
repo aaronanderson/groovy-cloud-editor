@@ -10,6 +10,7 @@ import CodeMirror, {
 	Editor,
 	Position,
 	EditorConfiguration,
+	EditorChange,
 } from 'codemirror';
 
 import {
@@ -86,6 +87,7 @@ export class GroovyEditorElement extends LitElement {
 	}
 
 	firstUpdated() {
+		console.log("firstUpdated", this._script);
 		const config: EditorConfiguration = {
 			value: this._script,
 			tabSize: 3,
@@ -97,7 +99,7 @@ export class GroovyEditorElement extends LitElement {
 			lint: <SyncLintStateOptions<Object>>{ /*lintOnChange: false*/ delay: 2500, selfContain: true, tooltips: true, getAnnotations: this.groovyLint.bind(this) }
 		};
 		this.editor = CodeMirror(this.editorElement, config);
-		this.editor.on("changes", (e: Editor) => { this.dispatchEvent(new CustomEvent(`editor-update`, { composed: true, detail: {} })) });
+		this.editor.on("changes", (e: Editor, c: Array<EditorChange>) => { this.dispatchEvent(new CustomEvent(`editor-update`, { composed: true, detail: {changes: c} })) });
 	}
 
 	/*

@@ -59,6 +59,7 @@ const editor = (state: EditorState = initialState, action: any) => {
 			case RUN_SCRIPT: {
 				draft.errorMessage = undefined;
 				draft.targetScript = action.payload.targetScript;
+				draft.execution = undefined;
 				draft.loading = true;
 				break
 			}

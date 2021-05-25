@@ -88,16 +88,50 @@ const loadScripts = async (db: any): Promise<Array<Script>> => {
 	if (!response.ok) {
 		throw Error(response.statusText);
 	}
-	let scripts: Array<Script> = scriptsResult.scripts;
+
+	//base64 encoded files in a single fetch is faster for small file sizes. Larger sizes may require formdata binary encoding.
+	let sourceScripts: Array<SourceScript> = scriptsResult.scripts;	
+	let scripts: Array<Script> = [];
+	for (let s of sourceScripts) {
+		let script = <Script>{}
+		script.scriptId = s.scriptId;
+	    let contents = await fetch(`data:${s.contents.content_type};base64,${s.contents.text}`);
+
+		script.contents = new File([await contents.blob()], s.contents.name, { type: s.contents.content_type, lastModified: new Date(s.contents.lastModified).getTime() });
+		if (s.attachment) {
+			contents = await fetch(`data:${s.attachment.content_type};base64,${s.attachment.text}`);
+			script.attachment = new File([await contents.blob()], s.attachment.name, { type: s.attachment.content_type, lastModified: new Date(s.attachment.lastModified).getTime() });
+		}
+		scripts.push(script);
+	};
+
+
+	//
+	//	let formData = await fetchFiles(s.id);		
+	//};
+
 	const tx = db.transaction('scripts', 'readwrite');
 	const store = tx.objectStore('scripts');
 	for (let i = 0; i < scripts.length; i++) {
 		let s: Script = scripts[i];
-		let entry = { ...s, scriptId: i + 1 };
+		let entry = { ...s};
 		await store.put(entry);
 	}
 	return scripts;
 }
+
+//not used
+const fetchFiles = async (id: string): Promise<FormData> => {
+	const response = await fetch(`api/gce/script-file/${id}`, {
+		method: 'GET'
+	});
+	const scriptFiles: FormData = await response.formData();
+	if (!response.ok) {
+		throw Error(response.statusText);
+	}
+	return scriptFiles;
+}
+
 
 const saveScripts = async (scripts: Array<Script>, db: any): Promise<void> => {
 
@@ -126,7 +160,7 @@ export const deleteScript: any = (index: number) => async (dispatch: any, getSta
 		const tx = db.transaction('scripts', 'readwrite');
 		const store = tx.objectStore('scripts');
 		let val = await store.delete(s.scriptId);
-		console.log(s.name, val);
+		console.log(s.content.name, val);
 		//await store.clear();
 	} finally {
 		db.close();
@@ -142,13 +176,21 @@ export const runScript: any = (index: number) => async (dispatch: any, getState:
 	try {
 		const { scripts } = getState().editor;
 		let s = scripts[index];
+		
+		 const formData = new FormData();
+		 formData.append('contents',s.contents);
+		 if (s.attachment){
+		    formData.append('attachment', s.attachment);	
+		 }
+		 
+
 		const response = await fetch("/api/gce/run", {
 			method: 'POST',
 			headers: {
 				'Accept': 'application/json',
-				'Content-Type': 'application/json'
+				//'Content-Type': 'multipart/form-data'
 			},
-			body: JSON.stringify(s)
+			body: formData
 		});
 		const runResult: RunResult = await response.json();
 		if (runResult.status == "error") {
@@ -168,10 +210,10 @@ export const resetScripts: any = () => async (dispatch: any) => {
 	let db = await gceuDB();
 	try {
 		let cursor = await db.transaction('scripts', 'readwrite').store.openCursor();
-		while (cursor) {		
-			if (cursor && cursor.delete){
+		while (cursor) {
+			if (cursor && cursor.delete) {
 				cursor.delete();
-			}				
+			}
 			cursor = await cursor.continue();
 		}
 		let scripts: Array<Script> = await loadScripts(db);
@@ -219,9 +261,46 @@ export const save: any = (updateScript: Script) => async (dispatch: any) => {
 
 }
 
+
+export const readFile = (file: File): Promise<string> => {
+	const fileReader = new FileReader();
+
+	return new Promise((resolve, reject) => {
+		fileReader.onerror = () => {
+			fileReader.abort();
+			reject(new DOMException("Problem parsing input file."));
+		};
+
+		fileReader.onload = () => {
+			resolve(fileReader.result as string);
+		};
+		fileReader.readAsText(file);
+	});
+};
+
+
+
 export interface ScriptsResult {
-	scripts: Array<Script>;
+	scripts: Array<SourceScript>;
 }
+
+export interface SourceScript {
+	scriptId: number;
+	contents: SourceAttachment;
+	attachment?: SourceAttachment;
+}
+
+export interface SourceAttachment {
+	name: string;
+	lastModified: string;
+	text: string;
+	content_type?: string;
+}
+
+export interface SourceAttachment {
+
+}
+
 
 export interface RunResult {
 	result?: Object;
@@ -236,11 +315,12 @@ export interface RunExecution {
 }
 
 
+
+
 export interface Script {
-	id: string;
-	name: string;
-	contents: string;
-	lastModified: string;
+	scriptId: number;
+	contents: File;
+	attachment?: File;
 }
 
 

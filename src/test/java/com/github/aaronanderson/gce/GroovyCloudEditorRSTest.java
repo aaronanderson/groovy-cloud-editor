@@ -395,19 +395,20 @@ public class GroovyCloudEditorRSTest {
                         "hints", hasItem(allOf(hasEntry("displayed", "add(int x, int y) - int"), hasEntry("value", "add(x, y)"))));
     }
 
-    //@Test
-    public void testHintFieldPartial() throws IOException {
+    @Test
+    public void testHintInnerClass() throws IOException {
         given()
                 .when()
-                .body(buildHint("/scripts/hint-field-partial.groovy", 3, 18, "before"))
+                .body(buildHint("/scripts/hint-inner-class.groovy", 3, 17, "before"))
                 .contentType(ContentType.JSON)
                 //.log().body()
                 .post("/api/gce/hint")
                 .then()
                 .statusCode(200)
-                //.log().body()
-                .body("status", is("ok"));
-        //        "result.value", is("Success"));
+                .log().body()
+                .body("status", is("ok"),
+                        "hints.size()", is(greaterThan(0)),
+                        "hints", hasItem(allOf(hasEntry("displayed", "Test()"), hasEntry("value", "Test()"))));
     }
 
 }

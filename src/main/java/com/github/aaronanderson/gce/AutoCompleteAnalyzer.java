@@ -209,9 +209,11 @@ public class AutoCompleteAnalyzer implements AutoCloseable {
             visitor.getVariableScopes().push(sourceUnit.getAST().getStatementBlock().getVariableScope());
             for (ClassNode classNode : sourceUnit.getAST().getClasses()) {
                 for (MethodNode method : classNode.getMethods()) {
-                    visitor.getVariableScopes().push(method.getVariableScope());
-                    method.getCode().visit(visitor);
-                    visitor.getVariableScopes().pop();
+                    if (method.getCode() != null) {
+                        visitor.getVariableScopes().push(method.getVariableScope());
+                        method.getCode().visit(visitor);
+                        visitor.getVariableScopes().pop();
+                    }
                 }
             }
 
@@ -296,7 +298,7 @@ public class AutoCompleteAnalyzer implements AutoCloseable {
         }
 
         private void newConstructorHint(ConstructorCallExpression constructorNode, VariableExpression varNode) {
-            Class<?> varType = varNode.getType().getTypeClass();
+            String varType = varNode.getType().getName();
             boolean isObject = varNode.isDynamicTyped();//java.lang.Object.class.equals(varType);
             if (!isObject || !constructorHint.isBlank()) {
 
@@ -305,8 +307,8 @@ public class AutoCompleteAnalyzer implements AutoCloseable {
                     classInfoList = classInfoList.filter(c -> c.getSimpleName().startsWith(constructorHint));
                 }
                 if (!isObject) {
-                    ClassInfo classInfo = getClassInfo(varType.getName());
-                    classInfoList = classInfoList.getAssignableTo(classInfo);
+                    ClassInfo classInfo = getClassInfo(varType);
+                    classInfoList = classInfoList.getStandardClasses().getAssignableTo(classInfo);
                 }
                 constructorHints(classInfoList, (ArgumentListExpression) constructorNode.getArguments());
             } else {
@@ -332,7 +334,7 @@ public class AutoCompleteAnalyzer implements AutoCloseable {
                     if (!constructorHint.isBlank()) {
                         classInfoList = classInfoList.filter(c -> c.getSimpleName().startsWith(constructorHint));
                     }
-                    classInfoList = classInfoList.filter(c -> isAssignable(c.loadClass(), parameterInfo.getTypeSignatureOrTypeDescriptor()));
+                    classInfoList = classInfoList.getStandardClasses().filter(c -> isAssignable(c.loadClass(), parameterInfo.getTypeSignatureOrTypeDescriptor()));
                     constructorHints(classInfoList, (ArgumentListExpression) constructorNode.getArguments());
                 }
             } else {
@@ -341,7 +343,6 @@ public class AutoCompleteAnalyzer implements AutoCloseable {
         }
 
         private void propertyHint(VariableExpression var) {
-            Class<?> clazz = null;
             if (var.isDynamicTyped()) {
                 if (var.getAccessedVariable() instanceof DynamicVariable) {
                     DynamicVariable dvar = (DynamicVariable) var.getAccessedVariable();
@@ -359,14 +360,15 @@ public class AutoCompleteAnalyzer implements AutoCloseable {
                     methodHints(dvar.getName(), new MethodInfoList(methodList), new ArgumentListExpression());
                 }
             } else {
-                clazz = var.getType().getTypeClass();
+                String clazz = var.getType().getName();
+                addPropertyHints(clazz, propertyHint != null ? propertyHint : "", null);
             }
-            addPropertyHints(clazz, propertyHint != null ? propertyHint : "", null);
+
         }
 
-        private void addPropertyHints(Class<?> clazz, String propertyName, MethodInfoFilter filter) {
+        private void addPropertyHints(String clazz, String propertyName, MethodInfoFilter filter) {
             if (clazz != null && !Object.class.equals(clazz)) {
-                ClassInfo classInfo = getClassInfo(clazz.getName());
+                ClassInfo classInfo = getClassInfo(clazz);
                 MethodInfoList methodList = classInfo.getMethodInfo().filter(m -> m.getName().startsWith(propertyName));
                 if (filter != null) {
                     methodList = methodList.filter(filter);
@@ -386,14 +388,14 @@ public class AutoCompleteAnalyzer implements AutoCloseable {
         }
 
         private void propertyHint(PropertyExpression prop, MethodInfoFilter filter) {
-            Class<?> clazz = null;
+            String clazz = null;
             if (prop.getObjectExpression() instanceof VariableExpression) {
                 VariableExpression varNode = (VariableExpression) prop.getObjectExpression();
                 if (varNode.getAccessedVariable() instanceof VariableExpression) {
-                    clazz = varNode.getAccessedVariable().getType().getTypeClass();
+                    clazz = varNode.getAccessedVariable().getType().getName();
                 }
             } else if (prop.getObjectExpression() instanceof ClassExpression) {
-                clazz = ((ClassExpression) prop.getObjectExpression()).getType().getTypeClass();
+                clazz = ((ClassExpression) prop.getObjectExpression()).getType().getName();
             }
             addPropertyHints(clazz, propertyHint != null ? propertyHint : prop.getPropertyAsString(), filter);
         }

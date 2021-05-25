@@ -47,8 +47,8 @@ export class GroovyScriptsPageElement extends ViewElement {
 					${this.scripts.map((s, i)=> 
 						html ` <tr class=${ this.selected == i ? "table-active": undefined } @click=${(e: MouseEvent)=> this.selected = (this.selected == i? -1: i)}>
 							     <th scope="row">${i + 1}</th>
-							     <td>${s.name}</td>
-							     <td>${new Date(s.lastModified).toLocaleString()}</td>
+							     <td>${s.contents.name}</td>
+							     <td>${new Date(s.contents.lastModified).toLocaleString()}</td>
 							   </tr>`
 					)}
 				   				   

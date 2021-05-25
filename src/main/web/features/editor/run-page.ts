@@ -40,8 +40,14 @@ export class GroovyRunPageElement extends ViewElement {
 			<div class="container">
 				 <div class="form-group">
 					<label>Script:</label>
-    				<span>${this.targetScript?.name}</span>
+    				<span>${this.targetScript?.contents?.name}</span>
 				 </div>
+				 ${this.targetScript?.attachment ? html `
+				   <div class="form-group">
+					<label>Attachment:</label>
+    				<span>${this.targetScript?.attachment?.name}</span>
+				 </div>	
+				`: undefined}
 				
 				${this.execution? html `
 					${this.execution.out? html `		

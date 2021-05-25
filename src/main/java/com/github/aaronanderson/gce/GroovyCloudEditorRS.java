@@ -1,8 +1,13 @@
 package com.github.aaronanderson.gce;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.PrintWriter;
+import java.io.Reader;
 import java.io.StringWriter;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Base64;
@@ -26,8 +31,10 @@ import javax.ws.rs.Consumes;
 import javax.ws.rs.GET;
 import javax.ws.rs.POST;
 import javax.ws.rs.Path;
+import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
 import javax.ws.rs.core.MediaType;
+import javax.ws.rs.core.MultivaluedMap;
 import javax.ws.rs.core.Response;
 
 import org.apache.commons.io.IOUtils;
@@ -40,8 +47,12 @@ import org.codehaus.groovy.control.messages.Message;
 import org.codehaus.groovy.control.messages.SyntaxErrorMessage;
 import org.codehaus.groovy.control.messages.WarningMessage;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.jboss.resteasy.plugins.providers.multipart.MultipartFormDataInput;
+import org.jboss.resteasy.plugins.providers.multipart.MultipartFormDataOutput;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.nio.file.Files;
 
 import groovy.lang.Binding;
 import groovy.lang.GroovyClassLoader;
@@ -56,6 +67,8 @@ import groovy.lang.Script;
 public class GroovyCloudEditorRS {
 
     static Logger logger = LoggerFactory.getLogger(GroovyCloudEditorRS.class);
+
+    static String[][] SCRIPTS = new String[][] { new String[] { "test.groovy", null, null }, new String[] { "excel.groovy", "excel.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" } };
 
     @ConfigProperty(name = "gce.run.importsBlacklist")
     List<String> importsBlacklist;
@@ -94,8 +107,10 @@ public class GroovyCloudEditorRS {
         try {
             JsonObjectBuilder status = Json.createObjectBuilder();
             JsonArrayBuilder scripts = Json.createArrayBuilder();
-
-            scripts.add(buildScript("test.groovy"));
+            for (int i = 0; i < SCRIPTS.length; i++) {
+                String[] script = SCRIPTS[i];
+                scripts.add(buildScript(i + 1, script[0], script[1], script[2]));
+            }
             status.add("scripts", scripts);
             status.add("status", "ok");
             return Response.status(200).entity(status.build()).build();
@@ -107,19 +122,61 @@ public class GroovyCloudEditorRS {
         }
     }
 
+    //Not used but could be more efficient for large attachment file size.
+    @GET
+    @Path("script-file/{id}")
+    @Produces(MediaType.MULTIPART_FORM_DATA)
+    public Response scriptFiles(@PathParam("id") String scriptId) {
+        try {
+            MultipartFormDataOutput output = new MultipartFormDataOutput();
+
+            String[] script = SCRIPTS[Integer.parseInt(scriptId) - 1];
+            byte[] file = IOUtils.toByteArray(Thread.currentThread().getContextClassLoader().getResourceAsStream("scripts/" + script[0]));
+            output.addFormData("contents", file, MediaType.TEXT_PLAIN_TYPE, script[0]);
+            if (script[1] != null) {
+                file = IOUtils.toByteArray(Thread.currentThread().getContextClassLoader().getResourceAsStream("scripts/" + script[1]));
+                output.addFormData("attachment", file, MediaType.valueOf(script[2]), script[1]);
+            }
+
+            JsonObjectBuilder status = Json.createObjectBuilder();
+            status.add("status", "ok");
+            output.addFormData("status", status.build(), MediaType.APPLICATION_JSON_TYPE);
+            return Response.status(200).entity(output).build();
+
+        } catch (Exception e) {
+            logger.error("", e);
+            JsonObject status = Json.createObjectBuilder().add("status", "error").add("message", e.getMessage() != null ? e.getMessage() : "").build();
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(status).build();
+        }
+    }
+
     @POST
     @Path("run")
-    public Response run(JsonObject request) {
+    @Consumes(MediaType.MULTIPART_FORM_DATA)
+    public Response run(MultipartFormDataInput input) {
         try {
-            String name = request.getString("name");
-            String contents = request.getString("contents");
-            byte[] scriptContents = Base64.getDecoder().decode(contents);
+            Reader scriptContents = input.getFormDataPart("contents", Reader.class, null);
+            String scriptName = getFileName(input.getFormDataMap().get("contents").get(0).getHeaders());
+            InputStream attachment = null;
+            String attachmentName = null;
+            if (input.getFormDataMap().containsKey("attachment")) {
+                attachmentName = getFileName(input.getFormDataMap().get("attachment").get(0).getHeaders());
+                attachment = input.getFormDataPart("attachment", InputStream.class, null);
+            }
+
+            //String name = request.getString("name");
+            //String contents = request.getString("contents");
+            //byte[] scriptContents = Base64.getDecoder().decode(contents);
             JsonObjectBuilder status = Json.createObjectBuilder();
             GroovyClassLoader gcl = new GroovyClassLoader();
             Map<String, Object> context = new HashMap<>();
             context.put("basePath", "/gce");
             Binding binding = new Binding();
             binding.setVariable("ctx", context);
+            if (attachment != null) {
+                binding.setVariable("attachmentName", attachmentName);
+                binding.setVariable("attachment", attachment);
+            }
 
             CompilerConfiguration config = new CompilerConfiguration();
             config.setParameters(true);
@@ -136,7 +193,7 @@ public class GroovyCloudEditorRS {
             customizer.setStarImportsBlacklist(starImportsBlacklist);
             customizer.setIndirectImportCheckEnabled(true);
             config.addCompilationCustomizers(customizer);
-            GroovyCodeSource codeSource = new GroovyCodeSource(new String(scriptContents), name, GroovyShell.DEFAULT_CODE_BASE);
+            GroovyCodeSource codeSource = new GroovyCodeSource(scriptContents, scriptName, GroovyShell.DEFAULT_CODE_BASE);
             //codeSource.setCachable(true); //source name should contain has for uniqueness. Cached at GroovyClassLoader level.
             StringWriter out = new StringWriter();
             GroovyShell gshell = new GroovyShell(gcl, binding, config);
@@ -235,7 +292,6 @@ public class GroovyCloudEditorRS {
         } catch (Throwable e) {
             logger.error("", e);
             JsonObject status = Json.createObjectBuilder().add("status", "error").add("message", e.getMessage() != null ? e.getMessage() : "").build();
-            // output.addFormData("status", status, MediaType.APPLICATION_JSON_TYPE);
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(status).build();
         }
     }
@@ -252,14 +308,45 @@ public class GroovyCloudEditorRS {
         return hintsJson.build();
     }
 
-    private static JsonObject buildScript(String name) throws IOException {
+    private static JsonObject buildScript(int id, String scriptName, String attachmentName, String attachmentMimeType) throws IOException {
         JsonObjectBuilder script = Json.createObjectBuilder();
-        byte[] testScript = IOUtils.toByteArray(Thread.currentThread().getContextClassLoader().getResourceAsStream("scripts/" + name));
-        script.add("name", name);
-        String contents = Base64.getEncoder().encodeToString(testScript);
+        script.add("scriptId", String.valueOf(id));
+
+        JsonObjectBuilder contents = Json.createObjectBuilder();
+        contents.add("name", scriptName);
+        contents.add("content_type", "text/plain");
+        contents.add("lastModified", ZonedDateTime.now().format(DateTimeFormatter.ISO_INSTANT));
+        byte[] file = IOUtils.toByteArray(Thread.currentThread().getContextClassLoader().getResourceAsStream("scripts/" + scriptName));
+        contents.add("text", Base64.getEncoder().encodeToString(file));
         script.add("contents", contents);
-        script.add("lastModified", ZonedDateTime.now().format(DateTimeFormatter.ISO_INSTANT));
+
+        if (attachmentName != null) {
+            JsonObjectBuilder attachment = Json.createObjectBuilder();
+            attachment.add("name", attachmentName);
+            attachment.add("content_type", attachmentMimeType);
+            attachment.add("lastModified", ZonedDateTime.now().format(DateTimeFormatter.ISO_INSTANT));
+            file = IOUtils.toByteArray(Thread.currentThread().getContextClassLoader().getResourceAsStream("scripts/" + attachmentName));
+            attachment.add("text", Base64.getEncoder().encodeToString(file));
+            script.add("attachment", attachment);
+        }
+
         return script.build();
+    }
+
+    private String getFileName(MultivaluedMap<String, String> header) {
+
+        String[] contentDisposition = header.getFirst("Content-Disposition").split(";");
+
+        for (String filename : contentDisposition) {
+            if ((filename.trim().startsWith("filename"))) {
+
+                String[] name = filename.split("=");
+
+                String finalFileName = name[1].trim().replaceAll("\"", "");
+                return finalFileName;
+            }
+        }
+        return "unknown";
     }
 
 }
