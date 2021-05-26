@@ -35,22 +35,21 @@ public class GroovyCloudEditorRSTest {
         given()
                 .when().get("/api/gce/scripts")
                 .then()
+                //.log().body()
                 .statusCode(200)
                 .body("status", is("ok"),
-                        "scripts.size()", is(1),
-                        "scripts[0].name", is("test.groovy"),
-                        "scripts[0].lastModified", notNullValue());
+                        "scripts.size()", is(2),
+                        "scripts[0].scriptId", is("1"),
+                        "scripts[0].contents.name", is("test.groovy"),
+                        "scripts[0].contents.lastModified", notNullValue(),
+                        "scripts[0].contents.text", notNullValue());
     }
 
-    private String buildScript(String path, boolean runMode) {
+    private String buildScript(String path) {
         JsonObjectBuilder request = Json.createObjectBuilder();
         request.add("name", path.substring(path.lastIndexOf("/") + 1));
         try {
-            if (runMode) {
-                request.add("contents", Base64.getEncoder().encodeToString(IOUtils.resourceToByteArray(path)));
-            } else {
-                request.add("script", IOUtils.resourceToString(path, Charset.defaultCharset()));
-            }
+            request.add("script", IOUtils.resourceToString(path, Charset.defaultCharset()));
         } catch (IOException e) {
             fail(e);
         }
@@ -61,8 +60,8 @@ public class GroovyCloudEditorRSTest {
     public void testSuccessRun() throws IOException {
         given()
                 .when()
-                .body(buildScript("/scripts/run-success.groovy", true))
-                .contentType(ContentType.JSON)
+                .contentType("multipart/form-data")
+                .multiPart("contents", "run-success.groovy", IOUtils.resourceToByteArray("/scripts/run-success.groovy"), "text/plain")
                 //.log().body()
                 .post("/api/gce/run")
                 .then()
@@ -76,8 +75,8 @@ public class GroovyCloudEditorRSTest {
     public void testInsecureRun() throws IOException {
         given()
                 .when()
-                .body(buildScript("/scripts/run-insecure.groovy", true))
-                .contentType(ContentType.JSON)
+                .contentType("multipart/form-data")
+                .multiPart("contents", "run-insecure.groovy", IOUtils.resourceToByteArray("/scripts/run-insecure.groovy"), "text/plain")
                 //.log().body()
                 .post("/api/gce/run")
                 .then()
@@ -89,7 +88,7 @@ public class GroovyCloudEditorRSTest {
     public void testValidate() throws IOException {
         given()
                 .when()
-                .body(buildScript("/scripts/validate-success.groovy", false))
+                .body(buildScript("/scripts/validate-success.groovy"))
                 .contentType(ContentType.JSON)
                 //.log().body()
                 .post("/api/gce/validate")
@@ -103,7 +102,7 @@ public class GroovyCloudEditorRSTest {
     public void testValidateError() throws IOException {
         given()
                 .when()
-                .body(buildScript("/scripts/validate-error.groovy", false))
+                .body(buildScript("/scripts/validate-error.groovy"))
                 .contentType(ContentType.JSON)
                 //.log().body()
                 .post("/api/gce/validate")
@@ -234,6 +233,22 @@ public class GroovyCloudEditorRSTest {
                         "hints.size()", is(greaterThan(0)),
                         "hints", hasItem(allOf(hasEntry("displayed", "concat(String str1) - String"), hasEntry("value", "concat(str1)"))));
     }
+    
+    @Test
+    public void testHintMethodReturn() throws IOException {
+        given()
+                .when()
+                .body(buildHint("/scripts/hint-method-return.groovy", 2, 34, "before"))
+                .contentType(ContentType.JSON)
+                //.log().body()
+                .post("/api/gce/hint")
+                .then()
+                .statusCode(200)
+                //.log().body()
+                .body("status", is("ok"),
+                        "hints.size()", is(greaterThan(0)),
+                        "hints", hasItem(allOf(hasEntry("displayed", "add(String param, String param2) - JsonObjectBuilder"), hasEntry("value", "add(param, param2)"))));
+    }
 
     @Test
     public void testHintMethodPartial() throws IOException {
@@ -330,6 +345,22 @@ public class GroovyCloudEditorRSTest {
                         "hints.size()", is(greaterThan(0)),
                         "hints", hasItem(allOf(hasEntry("displayed", "Comparator CASE_INSENSITIVE_ORDER"), hasEntry("value", "CASE_INSENSITIVE_ORDER"))));
     }
+    
+    @Test
+    public void testImport() throws IOException {
+        given()
+                .when()
+                .body(buildHint("/scripts/hint-import.groovy", 0, 18, "before"))
+                .contentType(ContentType.JSON)
+                //.log().body()
+                .post("/api/gce/hint")
+                .then()
+                .statusCode(200)
+                //.log().body()
+                .body("status", is("ok"),
+                        "hints.size()", is(greaterThan(0)),
+                        "hints", hasItem(allOf(hasEntry("displayed", "bind - package"), hasEntry("value", "bind"))));
+    }
 
     @Test
     public void testImportSingle() throws IOException {
@@ -341,7 +372,7 @@ public class GroovyCloudEditorRSTest {
                 .post("/api/gce/hint")
                 .then()
                 .statusCode(200)
-                .log().body()
+                //.log().body()
                 .body("status", is("ok"),
                         "hints.size()", is(greaterThan(0)),
                         "hints", hasItem(allOf(hasEntry("displayed", "createObjectBuilder() - JsonObjectBuilder"), hasEntry("value", "createObjectBuilder()"))));
@@ -405,7 +436,7 @@ public class GroovyCloudEditorRSTest {
                 .post("/api/gce/hint")
                 .then()
                 .statusCode(200)
-                .log().body()
+                //.log().body()
                 .body("status", is("ok"),
                         "hints.size()", is(greaterThan(0)),
                         "hints", hasItem(allOf(hasEntry("displayed", "Test()"), hasEntry("value", "Test()"))));

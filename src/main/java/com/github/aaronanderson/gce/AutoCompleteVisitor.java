@@ -1,9 +1,14 @@
 package com.github.aaronanderson.gce;
 
+import static com.github.aaronanderson.gce.AutoCompleteAnalyzer.printASTDetails;
+
 import java.util.LinkedList;
+import java.util.Map.Entry;
 
 import org.codehaus.groovy.ast.ASTNode;
 import org.codehaus.groovy.ast.CodeVisitorSupport;
+import org.codehaus.groovy.ast.ImportNode;
+import org.codehaus.groovy.ast.ModuleNode;
 import org.codehaus.groovy.ast.VariableScope;
 import org.codehaus.groovy.ast.expr.ArgumentListExpression;
 import org.codehaus.groovy.ast.expr.ArrayExpression;
@@ -60,8 +65,6 @@ import org.codehaus.groovy.ast.stmt.TryCatchStatement;
 import org.codehaus.groovy.ast.stmt.WhileStatement;
 import org.codehaus.groovy.classgen.BytecodeExpression;
 
-import static com.github.aaronanderson.gce.AutoCompleteAnalyzer.printASTDetails;
-
 class AutoCompleteVisitor extends CodeVisitorSupport {
 
     private final AutoCompleteRequest autoCompleteRequest;
@@ -86,8 +89,35 @@ class AutoCompleteVisitor extends CodeVisitorSupport {
         return variableScopes;
     }
 
+    void visitImports(ModuleNode module) {
+        for (ImportNode node : module.getImports()) {
+            if (lineMatch(node)) {
+                targetNodes.push(node);
+            }
+        }
+        for (ImportNode node : module.getStarImports()) {
+            if (lineMatch(node)) {
+                targetNodes.push(node);
+            }
+        }
+        for (Entry<String, ImportNode> i : module.getStaticImports().entrySet()) {
+            if (lineMatch(i.getValue())) {
+                targetNodes.push(i.getValue());
+            }
+        }
+        for (Entry<String, ImportNode> i : module.getStaticStarImports().entrySet()) {
+            if (lineMatch(i.getValue())) {
+                targetNodes.push(i.getValue());
+            }
+        }
+    }
+
+    private boolean lineMatch(ASTNode node) {
+        return node.getLineNumber() <= this.autoCompleteRequest.getLine() + 1 && this.autoCompleteRequest.getLine() + 1 <= node.getLastLineNumber();
+    }
+
     private void evaluateAutoComplete(ASTNode node) {
-        if (node.getLineNumber() <= this.autoCompleteRequest.getLine() + 1 && this.autoCompleteRequest.getLine() + 1 <= node.getLastLineNumber()) {
+        if (lineMatch(node)) {
             if (targetNodes.isEmpty()) {
                 targetVariableScopes.addAll(variableScopes);
             }

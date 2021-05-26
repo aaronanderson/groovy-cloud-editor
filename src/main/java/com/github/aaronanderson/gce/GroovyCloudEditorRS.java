@@ -164,9 +164,6 @@ public class GroovyCloudEditorRS {
                 attachment = input.getFormDataPart("attachment", InputStream.class, null);
             }
 
-            //String name = request.getString("name");
-            //String contents = request.getString("contents");
-            //byte[] scriptContents = Base64.getDecoder().decode(contents);
             JsonObjectBuilder status = Json.createObjectBuilder();
             GroovyClassLoader gcl = new GroovyClassLoader();
             Map<String, Object> context = new HashMap<>();
@@ -282,7 +279,10 @@ public class GroovyCloudEditorRS {
             String name = request.getString("name");
             String scriptContents = request.getString("script");
 
-            System.out.format("Hint Request: %d %d %s - %s\n%s\n", line.intValue(), ch.intValue(), sticky, name, scriptContents);
+            if (logger.isDebugEnabled()) {
+                logger.debug(String.format("Hint Request: %d %d %s - %s\n%s\n", line.intValue(), ch.intValue(), sticky, name, scriptContents));
+            }
+
             JsonObjectBuilder result = Json.createObjectBuilder();
             AutoCompleteRequest hintRequest = new AutoCompleteRequest(line.intValue(), ch.intValue(), sticky);
             List<Hint> hints = autoCompleteAnalyzer.analyze(hintRequest, name, scriptContents);

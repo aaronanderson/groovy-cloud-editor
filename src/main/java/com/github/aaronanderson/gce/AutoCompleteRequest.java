@@ -5,8 +5,8 @@ public class AutoCompleteRequest {
     private final int ch;
     private final String sticky;
 
-    private String constructorHint = "";
-    private String propertyHint = "";
+    private String constructorHint = null;
+    private String propertyHint = null;
 
     public AutoCompleteRequest(int line, int ch, String sticky) {
         this.line = line;

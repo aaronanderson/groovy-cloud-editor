@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import org.apache.commons.io.IOUtils;
@@ -38,6 +39,11 @@ import io.github.classgraph.ScanResult;
 import io.github.classgraph.TypeSignature;
 
 class AutoCompleteParser {
+
+    static Pattern NEW_CONSTRUCTOR = Pattern.compile("new\\s*(\\w*)\\s*($|\\))", Pattern.MULTILINE);
+    static Pattern METHOD_PARAM = Pattern.compile("\\([^)]*$", Pattern.MULTILINE);
+    static Pattern PROPERTY = Pattern.compile("\\.\\s*(\\w*)\\s*$", Pattern.MULTILINE);
+    static Pattern IMPORT = Pattern.compile("import (.+[^\\.;]+)(\\.?)", Pattern.MULTILINE);
 
     private final AutoCompleteRequest autoCompleteRequest;
     private final String name;
@@ -72,6 +78,9 @@ class AutoCompleteParser {
                     boolean handled = constructorHint(lines);
                     if (!handled) {
                         handled = methodParamHint(lines);
+                    }
+                    if (!handled) {
+                        handled = importHint(lines);
                     }
                     if (!handled) {
                         handled = propertyHint(lines);
@@ -136,14 +145,13 @@ class AutoCompleteParser {
 
     private boolean constructorHint(List<String> lines) {
         String srcLine = lines.get(autoCompleteRequest.getLine());
-        Matcher m = AutoCompleteAnalyzer.NEW_CONSTRUCTOR.matcher(srcLine);
+        Matcher m = NEW_CONSTRUCTOR.matcher(srcLine);
         if (m.find()) {
             StringBuilder modifedSrc = new StringBuilder(lines.get(autoCompleteRequest.getLine()));
             autoCompleteRequest.setConstructorHint(m.group(1));
             int start = m.start(1);
             int end = m.end(1);
             modifedSrc.replace(start, end, "Object()");
-            System.out.format("constructor hint \"%s\" %d %d %s->%s\n", autoCompleteRequest.getConstructorHint(), start, end, srcLine, modifedSrc);
             lines.set(autoCompleteRequest.getLine(), modifedSrc.toString());
             return compileUpdate(lines);
         }
@@ -152,7 +160,7 @@ class AutoCompleteParser {
 
     private boolean methodParamHint(List<String> lines) {
         String srcLine = lines.get(autoCompleteRequest.getLine());
-        Matcher m = AutoCompleteAnalyzer.METHOD_PARAM.matcher(srcLine);
+        Matcher m = METHOD_PARAM.matcher(srcLine);
         if (m.find()) {
             StringBuilder modifedSrc = new StringBuilder(lines.get(autoCompleteRequest.getLine()));
             modifedSrc.append(")");
@@ -162,16 +170,31 @@ class AutoCompleteParser {
         return false;
     }
 
+    private boolean importHint(List<String> lines) {
+        String srcLine = lines.get(autoCompleteRequest.getLine());
+        Matcher m = IMPORT.matcher(srcLine);
+        if (m.find()) {
+            StringBuilder modifedSrc = new StringBuilder(lines.get(autoCompleteRequest.getLine()));
+            if (m.group(2) != null) {
+                int start = m.start(2);
+                int end = m.end(2);
+                modifedSrc.replace(start, end, ".*");
+            }
+            lines.set(autoCompleteRequest.getLine(), modifedSrc.toString());
+            return compileUpdate(lines);
+        }
+        return false;
+    }
+
     private boolean propertyHint(List<String> lines) {
         String srcLine = lines.get(autoCompleteRequest.getLine());
-        Matcher m = AutoCompleteAnalyzer.PROPERTY.matcher(srcLine);
+        Matcher m = PROPERTY.matcher(srcLine);
         if (m.find()) {
             StringBuilder modifedSrc = new StringBuilder(lines.get(autoCompleteRequest.getLine()));
             autoCompleteRequest.setPropertyHint(m.group(1));
             int start = m.start(1);
             int end = m.end(1);
             modifedSrc.replace(start, end, "_");
-            System.out.format("property hint \"%s\" %d %d %s->%s\n", autoCompleteRequest.getPropertyHint(), start, end, srcLine, modifedSrc);
             lines.set(autoCompleteRequest.getLine(), modifedSrc.toString());
             return compileUpdate(lines);
         }

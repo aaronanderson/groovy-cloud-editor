@@ -102,17 +102,6 @@ export class GroovyEditorElement extends LitElement {
 		this.editor.on("changes", (e: Editor, c: Array<EditorChange>) => { this.dispatchEvent(new CustomEvent(`editor-update`, { composed: true, detail: {changes: c} })) });
 	}
 
-	/*
-		updated(changedProperties: Map<string, unknown>) {
-			if (this.editor) {
-				if (changedProperties.has("script") && this.script && this.script !== "") {
-					this.editor.setValue(this.script);
-				}
-				this.editor.refresh();
-			}
-		}
-	*/
-
 	render() {
 		return html`${this.editorElement}${this.hintElement}`;
 	}

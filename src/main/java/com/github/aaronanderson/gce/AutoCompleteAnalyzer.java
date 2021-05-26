@@ -17,8 +17,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
-import java.util.function.Consumer;
-import java.util.regex.Pattern;
 
 import org.codehaus.groovy.ast.ASTNode;
 import org.codehaus.groovy.ast.ClassNode;
@@ -55,6 +53,7 @@ import io.github.classgraph.MethodInfoList;
 import io.github.classgraph.MethodInfoList.MethodInfoFilter;
 import io.github.classgraph.MethodParameterInfo;
 import io.github.classgraph.PackageInfo;
+import io.github.classgraph.PackageInfoList;
 import io.github.classgraph.ReferenceTypeSignature;
 import io.github.classgraph.ScanResult;
 import io.github.classgraph.TypeParameter;
@@ -64,10 +63,6 @@ import io.github.classgraph.TypeVariableSignature;
 public class AutoCompleteAnalyzer implements AutoCloseable {
 
     static Logger logger = LoggerFactory.getLogger(AutoCompleteAnalyzer.class);
-
-    static Pattern NEW_CONSTRUCTOR = Pattern.compile("new\\s*(\\w*)\\s*($|\\))", Pattern.MULTILINE);
-    static Pattern METHOD_PARAM = Pattern.compile("\\([^)]*$", Pattern.MULTILINE);
-    static Pattern PROPERTY = Pattern.compile("\\.\\s*(\\w*)\\s*$", Pattern.MULTILINE);
 
     private static final Map<Class<?>, Class<?>> WRAPPER_TYPES;
     static {
@@ -157,8 +152,8 @@ public class AutoCompleteAnalyzer implements AutoCloseable {
         private final Map<TypeSignature, String> paramNameCache = new HashMap<>();
         private final Set<String> ignoreVarNames = new HashSet<>();
 
-        private String constructorHint = "";
-        private String propertyHint = "";
+        private String constructorHint = null;
+        private String propertyHint = null;
 
         private SourceUnitInspector(SourceUnit sourceUnit, AutoCompleteRequest autoCompleteRequest, ScanResult scriptResult) {
             this.sourceUnit = sourceUnit;
@@ -206,6 +201,7 @@ public class AutoCompleteAnalyzer implements AutoCloseable {
             lastImportLine = scanImports();
 
             AutoCompleteVisitor visitor = new AutoCompleteVisitor(autoCompleteRequest);
+            visitor.visitImports(sourceUnit.getAST());
             visitor.getVariableScopes().push(sourceUnit.getAST().getStatementBlock().getVariableScope());
             for (ClassNode classNode : sourceUnit.getAST().getClasses()) {
                 for (MethodNode method : classNode.getMethods()) {
@@ -223,7 +219,9 @@ public class AutoCompleteAnalyzer implements AutoCloseable {
             if (targetNodes.size() > 0) {
                 int targetLine = autoCompleteRequest.getLine() + 1;
                 int targetColumn = autoCompleteRequest.getCh();
-                logger.info(String.format("Target %d ASTNodes found for line %d column %d", targetNodes.size(), targetLine, autoCompleteRequest.getCh()));
+                if (logger.isDebugEnabled()) {
+                    logger.debug(String.format("Target %d ASTNodes found for line %d column %d", targetNodes.size(), targetLine, autoCompleteRequest.getCh()));
+                }
                 while (targetNodes.size() > 0) {
                     ASTNode node = targetNodes.pop();
                     if ((node.getLineNumber() <= targetLine && targetLine <= node.getLastLineNumber()) && (node.getColumnNumber() <= targetColumn && targetColumn <= node.getLastColumnNumber())) {
@@ -238,9 +236,11 @@ public class AutoCompleteAnalyzer implements AutoCloseable {
                             }
                         }
 
-                        logger.info(String.format("Target ASTNode %s found for line %d-%d column %d-%d %s", node, node.getLineNumber(), node.getLastLineNumber(), node.getColumnNumber(), node.getLastColumnNumber(), node.getText()));
-                        if (prevNode != null) {
-                            logger.info(String.format("Prev   ASTNode %s found for line %d-%d column %d-%d %s", prevNode, prevNode.getLineNumber(), prevNode.getLastLineNumber(), prevNode.getColumnNumber(), prevNode.getLastColumnNumber(), prevNode.getText()));
+                        if (logger.isDebugEnabled()) {
+                            logger.debug(String.format("Target ASTNode %s found for line %d-%d column %d-%d %s", node, node.getLineNumber(), node.getLastLineNumber(), node.getColumnNumber(), node.getLastColumnNumber(), node.getText()));
+                            if (prevNode != null) {
+                                logger.debug(String.format("Prev ASTNode %s found for line %d-%d column %d-%d %s", prevNode, prevNode.getLineNumber(), prevNode.getLastLineNumber(), prevNode.getColumnNumber(), prevNode.getLastColumnNumber(), prevNode.getText()));
+                            }
                         }
                         if (node instanceof ConstructorCallExpression) {
                             ConstructorCallExpression constructor = (ConstructorCallExpression) node;
@@ -260,6 +260,8 @@ public class AutoCompleteAnalyzer implements AutoCloseable {
                             }
                         } else if (node instanceof VariableExpression) {
                             propertyHint((VariableExpression) node);
+                        } else if (node instanceof ImportNode) {
+                            importHint((ImportNode) node);
                         }
 
                         break;
@@ -295,6 +297,37 @@ public class AutoCompleteAnalyzer implements AutoCloseable {
                 lastImportLine = i.getValue().getLastLineNumber() > lastImportLine ? i.getValue().getLastLineNumber() : lastImportLine;
             }
             return lastImportLine;
+        }
+
+        private void importHint(ImportNode importNode) {
+            String packageName = null;
+            if (importNode.getPackageName() != null) {
+                packageName = importNode.getPackageName().substring(0, importNode.getPackageName().length() - 1);
+            } else {
+                packageName = importNode.getType().getTypeClass().getName();
+            }
+            PackageInfo packageInfo = globalScanResult.getPackageInfo(packageName);
+            if (packageInfo != null) {
+                PackageInfoList childPackageInfoList = packageInfo.getChildren();
+                ClassInfoList classInfoList = packageInfo.getClassInfo();
+                int[] entered = new int[] { 0, 0 };
+                //.filter(p-> importHint!=null? p.(): true))
+                for (PackageInfo childPackageInfo : childPackageInfoList) {
+                    String hint = childPackageInfo.getName().substring(packageInfo.getName().length() + 1);
+                    StringBuilder display = new StringBuilder(hint).append(" - package");
+                    hints.add(new Hint(entered, display.toString(), hint));
+                }
+                for (ClassInfo classInfo : classInfoList) {
+                    String hint = classInfo.getSimpleName();
+                    hints.add(new Hint(entered, hint, hint));
+                }
+            }
+
+        }
+
+        private String packageLocalName(PackageInfo packageInfo) {
+            String[] packageElements = packageInfo.getName().split("\\.");
+            return packageElements[packageElements.length - 1];
         }
 
         private void newConstructorHint(ConstructorCallExpression constructorNode, VariableExpression varNode) {
@@ -367,7 +400,7 @@ public class AutoCompleteAnalyzer implements AutoCloseable {
         }
 
         private void addPropertyHints(String clazz, String propertyName, MethodInfoFilter filter) {
-            if (clazz != null && !Object.class.equals(clazz)) {
+            if (clazz != null && !Object.class.getName().equals(clazz)) {
                 ClassInfo classInfo = getClassInfo(clazz);
                 MethodInfoList methodList = classInfo.getMethodInfo().filter(m -> m.getName().startsWith(propertyName));
                 if (filter != null) {
@@ -417,9 +450,21 @@ public class AutoCompleteAnalyzer implements AutoCloseable {
             //if (isFunction(methodNode)) {
             //System.out.format("Function %s\n", methodHintValue);
             //} else {
-            MethodInfoList methodList = findMethods(methodNode, false, argumentExpressions);
-            methodList = methodList.filter(m -> m.getParameterInfo().length > fparameterIndex);
-            methodHints(methodHintValue, methodList, argumentExpressions);
+            if (propertyHint != null) {
+                MethodInfoList methodList = findMethods(methodNode, true, argumentExpressions);
+                if (methodList.size() == 1) {
+                    TypeSignature returnType = methodList.get(0).getTypeDescriptor().getResultType();
+                    if (returnType instanceof ClassRefTypeSignature) {
+                        ClassInfo classReturnType = ((ClassRefTypeSignature) returnType).getClassInfo();
+                        addPropertyHints(classReturnType.getName(), propertyHint, null);
+
+                    }
+                }
+            } else {
+                MethodInfoList methodList = findMethods(methodNode, false, argumentExpressions);
+                methodList = methodList.filter(m -> m.getParameterInfo().length > fparameterIndex);
+                methodHints(methodHintValue, methodList, argumentExpressions);
+            }
 
             //}
         }
@@ -438,6 +483,8 @@ public class AutoCompleteAnalyzer implements AutoCloseable {
                     clazz = methodNode.getObjectExpression().getType().getTypeClass().getName();
                 }
             } else if (methodNode.getObjectExpression() instanceof ConstructorCallExpression) {
+                clazz = methodNode.getObjectExpression().getType().getTypeClass().getName();
+            } else if (methodNode.getObjectExpression() instanceof ClassExpression) {
                 clazz = methodNode.getObjectExpression().getType().getTypeClass().getName();
             }
             if (clazz == null || Object.class.getName().equals(clazz)) {
@@ -602,12 +649,12 @@ public class AutoCompleteAnalyzer implements AutoCloseable {
     }
 
     static void printASTDetails(ASTNode e, String format, Object... args) {
-        if (true) {
+        if (logger.isDebugEnabled()) {
             Object[] lineArgs = new Object[] { e.getLineNumber(), e.getLastLineNumber(), e.getColumnNumber(), e.getLastColumnNumber(), e.getText() };
             Object[] formatArgs = Arrays.copyOf(lineArgs, lineArgs.length + args.length);
             System.arraycopy(args, 0, formatArgs, lineArgs.length, args.length);
 
-            GroovyCloudEditorRS.logger.info(String.format("line: %d-%d %d-%d - %s\t" + format, formatArgs));
+            logger.info(String.format("line: %d-%d %d-%d - %s\t" + format, formatArgs));
         }
     }
 
