@@ -12,7 +12,6 @@
 	"author": "Aaron Anderson",
 	"license": "Apache-2.0",
 	"dependencies": {
-		"@aaronanderson/lwdc": "^1.0.33",
 		"@granite-elements/granite-lit-bootstrap": "^4.6.0-0",
 		"@vaadin/router": "^1.7.4",
 		"codemirror": "^5.61.0",
@@ -28,6 +27,7 @@
 		"http-proxy": "^1.18.1",
 		"redux-devtools-extension": "^2.13.9",
 		"snowpack": "^3.3.7",
+		"tslib": "^2.2.0",
 		"typescript": "^4.2.4",
 		"typescript-lit-html-plugin": "^0.9.0"
 	}
