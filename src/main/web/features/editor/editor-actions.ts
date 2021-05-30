@@ -1,6 +1,6 @@
 import { Router } from '@vaadin/router';
 
-import { gceuDB, cyrb53 } from '../../app/store';
+import { gceDB, cyrb53 } from '../../app/store';
 
 export const FETCH_SCRIPTS = 'FETCH_SCRIPTS'
 export const FETCH_SCRIPTS_SUCCESS = 'FETCH_SCRIPTS_SUCCESS'
@@ -51,7 +51,7 @@ export interface EditorState {
 export const fetchScripts: any = () => async (dispatch: any) => {
 	dispatch({ type: FETCH_SCRIPTS });
 
-	let db = await gceuDB();
+	let db = await gceDB();
 	try {
 		let scripts: Array<Script> = [];
 		let cursor = await db.transaction('scripts').store.openCursor();
@@ -152,7 +152,7 @@ export const validateScript: any = (validating: boolean) => async (dispatch: any
 
 
 export const deleteScript: any = (index: number) => async (dispatch: any, getState: any) => {
-	let db = await gceuDB();
+	let db = await gceDB();
 	try {
 		const { scripts } = getState().editor;
 		let s = scripts[index];
@@ -206,7 +206,7 @@ export const runScript: any = (index: number) => async (dispatch: any, getState:
 
 export const resetScripts: any = () => async (dispatch: any) => {
 	dispatch({ type: RESET_SCRIPTS });
-	let db = await gceuDB();
+	let db = await gceDB();
 	try {
 		let cursor = await db.transaction('scripts', 'readwrite').store.openCursor();
 		while (cursor) {
@@ -242,7 +242,7 @@ export const back: any = () => async (dispatch: any) => {
 
 export const save: any = (updateScript: Script) => async (dispatch: any) => {
 	dispatch({ type: SAVE_SCRIPT });
-	let db = await gceuDB();
+	let db = await gceDB();
 	try {
 		const tx = db.transaction('scripts', 'readwrite');
 		const store = tx.objectStore('scripts');

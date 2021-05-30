@@ -10,7 +10,7 @@ import { EditorState } from '../features/editor/editor-actions';
 
 import { openDB } from "idb";
 
-export const gceuDB = () => {
+export const gceDB = () => {
 	return openDB("gceDB", 1, {
 		upgrade(db, oldVersion) {
 			if (oldVersion == 0) {
