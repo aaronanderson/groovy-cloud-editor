@@ -63,6 +63,8 @@ This reference application is not intended to be included in a commercial produc
 
 Traditional data conversion or test case management are problem spaces where this application would be appropriate. The user base is limited, users are accountable, the scripts are simple, and work can be rapidly developed and executed without a complete  traditional deployment pipeline.
 
+#### Source Modification ####
+In certain circumstances, such as dangling periods or incomplete constructor statements, the Groovy compiler is unable to parse the script as it contains invalid syntax. The automcomplete functionality will catch compiler errors and if there is only one it will examine the problematic source line and attempt to slightly adjust it in order for it to be parsable and allow the rest of the inspection to continue.
 
 #### Security ####
 
@@ -85,7 +87,7 @@ Normally the server-side hint implementation partially compiles the scripts up t
 
 [CodeMirror 6](https://codemirror.net/6/) is a major rewrite and is currently in beta. CodeMirror 6 uses [Language Packages](https://codemirror.net/6/examples/lang-package/) and  require a parser such as a [Lezer](https://lezer.codemirror.net/) grammar. CodeMirror 6 does support [autocomplete](https://codemirror.net/6/docs/ref/#autocomplete).
 
-Currently a Lezer parser for Groovy is unavailable although one could be created based off of the [Java](https://github.com/lezer-parser/java/blob/master/src/java.grammar) one.  With CodeMirror 6 full parsing the autocomplete/hint functionality could be greatly simplified by sending only contextual AST data server-side instead of the whole script for Java reflection. Additionally with most of the syntax validation performed in the parser only a single full script validation on the server-side would be necessary before persisting the script.
+Currently a Lezer parser for Groovy is unavailable although one could be created based off of the [Java](https://github.com/lezer-parser/java/blob/master/src/java.grammar) one.  With CodeMirror 6 full parsing the autocomplete/hint functionality could be greatly simplified by sending only contextual AST data server-side instead of the whole script for Java reflection. The gramar may also be devised to be more flexible to allow for autocompletion in specific context which otherwise would be considered invalid syntax. Additionally with most of the syntax validation performed in the parser only a single full script validation on the server-side would be necessary before persisting the script.
 
 #### Key Assets ####
 
