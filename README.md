@@ -41,6 +41,8 @@ While Quarkus is running the Snowpack devserver can run concurrently for real-ti
 
 `yarn start`
 
+The application will be available at `http://localhost:8080`
+
 To run Quarkus in production mode start the runner jar:
 
 `java -jar target/quarkus-app/quarkus-run.jar`
