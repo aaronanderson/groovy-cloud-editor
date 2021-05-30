@@ -1,5 +1,5 @@
 const httpProxy = require('http-proxy');
-const proxy = httpProxy.createServer({"target": "http://localhost:5000","proxyTimeout" : 60000});
+const proxy = httpProxy.createServer({"target": "http://localhost:5000","proxyTimeout" : 600000});
 const proxyDest = (req, res) => proxy.web(req, res);
 /** @type {import("snowpack").SnowpackUserConfig } */
 module.exports = {

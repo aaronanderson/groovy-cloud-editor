@@ -74,7 +74,6 @@ export class GroovyScriptsPageElement extends ViewElement {
 	
 	stateChanged(state: GCEStore) {
 		if (state.editor) {
-			console.log(state.editor);
 			this.scripts = state.editor.scripts;
 			this.loading = state.editor.loading;
 			this.errorMessage = state.editor.errorMessage;

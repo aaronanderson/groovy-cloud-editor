@@ -9,7 +9,6 @@ import { GCEStore } from '../../app/store';
 import { RunExecution, back } from './editor-actions';
 
 
-
 @customElement('groovy-run-page')
 export class GroovyRunPageElement extends ViewElement {
 
@@ -22,18 +21,9 @@ export class GroovyRunPageElement extends ViewElement {
 	@property({ type: Object })
 	targetScript: any = {};
 
-
-	
-	static get styles() {
-		return [super.styles, css` 
-					
-					`];
-	}
 	
 	render() {
-
 		return html`
-
 			${this.pageTitleTemplate}
 			${this.loadingTemplate}
 			${this.errorTemplate}
@@ -65,26 +55,18 @@ export class GroovyRunPageElement extends ViewElement {
 					<button type="button" class="btn btn-secondary" @click=${(e: MouseEvent)=> this.dispatch(back())}>Back</button>					
 				</div>
 			</div>
-
     `;
 	}
-
 
 	
 	stateChanged(state: GCEStore) {
 		if (state.editor) {
-			console.log(state.editor);
 			this.loading = state.editor.loading;
 			this.errorMessage = state.editor.errorMessage;
 			this.targetScript = state.editor.targetScript;
 			this.execution = state.editor.execution; 
 		}
-
 	}
-
-
-
-
 }
 
 

@@ -10,6 +10,8 @@ export const NEW_SCRIPT = 'NEW_SCRIPT'
 
 export const EDIT_SCRIPT = 'EDIT_SCRIPT'
 
+export const VALIDATE_SCRIPT = 'VALIDATE_SCRIPT'
+
 export const DELETE_SCRIPT = 'DELETE_SCRIPT'
 export const DELETE_SCRIPT_SUCCESS = 'DELETE_SCRIPT_SUCCESS'
 export const DELETE_SCRIPT_ERROR = 'DELETE_SCRIPT_ERROR'
@@ -49,7 +51,6 @@ export interface EditorState {
 export const fetchScripts: any = () => async (dispatch: any) => {
 	dispatch({ type: FETCH_SCRIPTS });
 
-
 	let db = await gceuDB();
 	try {
 		let scripts: Array<Script> = [];
@@ -59,7 +60,6 @@ export const fetchScripts: any = () => async (dispatch: any) => {
 			scripts.push(<Script>{ ...cursor.value });
 			cursor = await cursor.continue();
 		}
-
 
 		if (scripts.length > 0) {
 			dispatch({ type: FETCH_SCRIPTS_SUCCESS, payload: { scripts: scripts } });
@@ -72,13 +72,11 @@ export const fetchScripts: any = () => async (dispatch: any) => {
 				dispatch({ type: FETCH_SCRIPTS_ERROR, payload: { error: error } })
 			}
 		}
-
 	} finally {
 		db.close();
 	}
-
-
 }
+
 
 const loadScripts = async (db: any): Promise<Array<Script>> => {
 	const response = await fetch("/api/gce/scripts", {
@@ -90,12 +88,12 @@ const loadScripts = async (db: any): Promise<Array<Script>> => {
 	}
 
 	//base64 encoded files in a single fetch is faster for small file sizes. Larger sizes may require formdata binary encoding.
-	let sourceScripts: Array<SourceScript> = scriptsResult.scripts;	
+	let sourceScripts: Array<SourceScript> = scriptsResult.scripts;
 	let scripts: Array<Script> = [];
 	for (let s of sourceScripts) {
 		let script = <Script>{}
-		script.scriptId = s.scriptId;
-	    let contents = await fetch(`data:${s.contents.content_type};base64,${s.contents.text}`);
+		script.scriptId = Number(s.scriptId);
+		let contents = await fetch(`data:${s.contents.content_type};base64,${s.contents.text}`);
 
 		script.contents = new File([await contents.blob()], s.contents.name, { type: s.contents.content_type, lastModified: new Date(s.contents.lastModified).getTime() });
 		if (s.attachment) {
@@ -105,20 +103,18 @@ const loadScripts = async (db: any): Promise<Array<Script>> => {
 		scripts.push(script);
 	};
 
-
-	//
 	//	let formData = await fetchFiles(s.id);		
-	//};
 
 	const tx = db.transaction('scripts', 'readwrite');
 	const store = tx.objectStore('scripts');
 	for (let i = 0; i < scripts.length; i++) {
 		let s: Script = scripts[i];
-		let entry = { ...s};
+		let entry = { ...s };
 		await store.put(entry);
 	}
 	return scripts;
 }
+
 
 //not used
 const fetchFiles = async (id: string): Promise<FormData> => {
@@ -133,15 +129,13 @@ const fetchFiles = async (id: string): Promise<FormData> => {
 }
 
 
-const saveScripts = async (scripts: Array<Script>, db: any): Promise<void> => {
-
-}
-
 export const newScript: any = () => async (dispatch: any, getState: any) => {
-	await dispatch({ type: NEW_SCRIPT, payload: { targetScript: { name: 'new.groovy' } } });
+	let contents = new File([], "undefined.groovy", { type: "text/plain", lastModified: new Date().getTime() });
+	await dispatch({ type: NEW_SCRIPT, payload: { targetScript: { name: 'new.groovy', contents: contents } } });
 	Router.go('/edit');
 
 }
+
 
 export const editScript: any = (index: number) => async (dispatch: any, getState: any) => {
 	const { scripts } = getState().editor;
@@ -150,6 +144,12 @@ export const editScript: any = (index: number) => async (dispatch: any, getState
 	Router.go('/edit');
 
 }
+
+
+export const validateScript: any = (validating: boolean) => async (dispatch: any, getState: any) => {
+	await dispatch({ type: VALIDATE_SCRIPT, payload: { validating: validating } })
+}
+
 
 export const deleteScript: any = (index: number) => async (dispatch: any, getState: any) => {
 	let db = await gceuDB();
@@ -160,12 +160,12 @@ export const deleteScript: any = (index: number) => async (dispatch: any, getSta
 		const tx = db.transaction('scripts', 'readwrite');
 		const store = tx.objectStore('scripts');
 		let val = await store.delete(s.scriptId);
-		console.log(s.content.name, val);
 		//await store.clear();
 	} finally {
 		db.close();
 	}
 }
+
 
 export const runScript: any = (index: number) => async (dispatch: any, getState: any) => {
 	const { scripts } = getState().editor;
@@ -176,13 +176,13 @@ export const runScript: any = (index: number) => async (dispatch: any, getState:
 	try {
 		const { scripts } = getState().editor;
 		let s = scripts[index];
-		
-		 const formData = new FormData();
-		 formData.append('contents',s.contents);
-		 if (s.attachment){
-		    formData.append('attachment', s.attachment);	
-		 }
-		 
+
+		const formData = new FormData();
+		formData.append('contents', s.contents);
+		if (s.attachment) {
+			formData.append('attachment', s.attachment);
+		}
+
 
 		const response = await fetch("/api/gce/run", {
 			method: 'POST',
@@ -201,9 +201,8 @@ export const runScript: any = (index: number) => async (dispatch: any, getState:
 		console.error('Error:', error);
 		dispatch({ type: RUN_SCRIPT_ERROR, payload: { error: error } })
 	}
-
-
 }
+
 
 export const resetScripts: any = () => async (dispatch: any) => {
 	dispatch({ type: RESET_SCRIPTS });
@@ -224,9 +223,8 @@ export const resetScripts: any = () => async (dispatch: any) => {
 	} finally {
 		db.close();
 	}
-
-
 }
+
 
 export const back: any = () => async (dispatch: any) => {
 	dispatch({ type: BACK_TO_HOME });
@@ -241,11 +239,11 @@ export const back: any = () => async (dispatch: any) => {
 
 }
 
+
 export const save: any = (updateScript: Script) => async (dispatch: any) => {
 	dispatch({ type: SAVE_SCRIPT });
 	let db = await gceuDB();
 	try {
-		console.log("save", updateScript);
 		const tx = db.transaction('scripts', 'readwrite');
 		const store = tx.objectStore('scripts');
 		await store.put(updateScript);
@@ -257,8 +255,6 @@ export const save: any = (updateScript: Script) => async (dispatch: any) => {
 	} finally {
 		db.close();
 	}
-
-
 }
 
 
@@ -279,10 +275,10 @@ export const readFile = (file: File): Promise<string> => {
 };
 
 
-
 export interface ScriptsResult {
 	scripts: Array<SourceScript>;
 }
+
 
 export interface SourceScript {
 	scriptId: number;
@@ -290,12 +286,14 @@ export interface SourceScript {
 	attachment?: SourceAttachment;
 }
 
+
 export interface SourceAttachment {
 	name: string;
 	lastModified: string;
 	text: string;
 	content_type?: string;
 }
+
 
 export interface SourceAttachment {
 
@@ -309,12 +307,11 @@ export interface RunResult {
 	message?: string;
 }
 
+
 export interface RunExecution {
 	result?: Object;
 	out?: string;
 }
-
-
 
 
 export interface Script {
@@ -322,6 +319,3 @@ export interface Script {
 	contents: File;
 	attachment?: File;
 }
-
-
-

@@ -217,6 +217,22 @@ public class GroovyCloudEditorRSTest {
                         "hints.size()", is(greaterThan(0)),
                         "hints", hasItem(allOf(hasEntry("displayed", "java.lang.String()"), hasEntry("value", "String()"))));
     }
+    
+    @Test
+    public void testHintMethodConstructorParam() throws IOException {
+        given()
+                .when()
+                .body(buildHint("/scripts/hint-method-constructor-param.groovy", 2, 45, "before"))
+                .contentType(ContentType.JSON)
+                //.log().body()
+                .post("/api/gce/hint")
+                .then()
+                .statusCode(200)
+                //.log().body()
+                .body("status", is("ok"),
+                        "hints.size()", is(greaterThan(0)),
+                        "hints", hasItem(allOf(hasEntry("displayed", "java.lang.String()"), hasEntry("value", "String()"))));
+    }
 
     @Test
     public void testHintMethod() throws IOException {
@@ -248,6 +264,87 @@ public class GroovyCloudEditorRSTest {
                 .body("status", is("ok"),
                         "hints.size()", is(greaterThan(0)),
                         "hints", hasItem(allOf(hasEntry("displayed", "add(String param, String param2) - JsonObjectBuilder"), hasEntry("value", "add(param, param2)"))));
+    }
+    
+    
+    @Test
+    public void testHintMethodReturn2() throws IOException {
+        given()
+                .when()
+                .body(buildHint("/scripts/hint-method-return2.groovy", 2, 34, "before"))
+                .contentType(ContentType.JSON)
+                //.log().body()
+                .post("/api/gce/hint")
+                .then()
+                .statusCode(200)
+                //.log().body()
+                .body("status", is("ok"),
+                        "hints.size()", is(greaterThan(0)),
+                        "hints", hasItem(allOf(hasEntry("displayed", "add(String param, String param2) - JsonObjectBuilder"), hasEntry("value", "add(param, param2)"))));
+    }
+    
+    @Test
+    public void testHintMethodReturn3() throws IOException {
+        given()
+                .when()
+                .body(buildHint("/scripts/hint-method-return3.groovy", 2, 36, "before"))
+                .contentType(ContentType.JSON)
+                //.log().body()
+                .post("/api/gce/hint")
+                .then()
+                .statusCode(200)
+                //.log().body()
+                .body("status", is("ok"),
+                        "hints.size()", is(greaterThan(0)),
+                        "hints", hasItem(allOf(hasEntry("displayed", "add(String param, String param2) - JsonObjectBuilder"), hasEntry("value", "add(param, param2)"))));
+    }
+    
+    @Test
+    public void testHintMethodReturn4() throws IOException {
+        given()
+                .when()
+                .body(buildHint("/scripts/hint-method-return4.groovy", 3, 3, "before"))
+                .contentType(ContentType.JSON)
+                //.log().body()
+                .post("/api/gce/hint")
+                .then()
+                .statusCode(200)
+                //.log().body()
+                .body("status", is("ok"),
+                        "hints.size()", is(greaterThan(0)),
+                        "hints", hasItem(allOf(hasEntry("displayed", "add(String param, String param2) - JsonObjectBuilder"), hasEntry("value", "add(param, param2)"))));
+    }
+    
+    @Test
+    public void testHintMethodReturn5() throws IOException {
+        given()
+                .when()
+                .body(buildHint("/scripts/hint-method-return5.groovy", 2, 59, "before"))
+                .contentType(ContentType.JSON)
+                //.log().body()
+                .post("/api/gce/hint")
+                .then()
+                .statusCode(200)
+                //.log().body()
+                .body("status", is("ok"),
+                        "hints.size()", is(greaterThan(0)),
+                        "hints", hasItem(allOf(hasEntry("displayed", "build() - JsonObject"), hasEntry("value", "build()"))));
+    }
+    
+    @Test
+    public void testHintMethodReturn6() throws IOException {
+        given()
+                .when()
+                .body(buildHint("/scripts/hint-method-return6.groovy", 2, 12, "before"))
+                .contentType(ContentType.JSON)
+                //.log().body()
+                .post("/api/gce/hint")
+                .then()
+                .statusCode(200)
+                //.log().body()
+                .body("status", is("ok"),
+                        "hints.size()", is(greaterThan(0)),
+                        "hints", hasItem(allOf(hasEntry("displayed", "createObjectBuilder() - JsonObjectBuilder"), hasEntry("value", "createObjectBuilder()"))));
     }
 
     @Test
@@ -350,7 +447,7 @@ public class GroovyCloudEditorRSTest {
     public void testImport() throws IOException {
         given()
                 .when()
-                .body(buildHint("/scripts/hint-import.groovy", 0, 18, "before"))
+                .body(buildHint("/scripts/hint-import.groovy", 0, 21, "before"))
                 .contentType(ContentType.JSON)
                 //.log().body()
                 .post("/api/gce/hint")
@@ -399,6 +496,38 @@ public class GroovyCloudEditorRSTest {
         given()
                 .when()
                 .body(buildHint("/scripts/hint-import-method2.groovy", 2, 4, "before"))
+                .contentType(ContentType.JSON)
+                //.log().body()
+                .post("/api/gce/hint")
+                .then()
+                .statusCode(200)
+                //.log().body()
+                .body("status", is("ok"),
+                        "hints.size()", is(greaterThan(0)),
+                        "hints", hasItem(allOf(hasEntry("displayed", "abs(int param) - int"), hasEntry("value", "abs(param)"))));
+    }
+    
+    @Test
+    public void testImportMethod3() throws IOException {
+        given()
+                .when()
+                .body(buildHint("/scripts/hint-import-method3.groovy", 0, 29, "before"))
+                .contentType(ContentType.JSON)
+                //.log().body()
+                .post("/api/gce/hint")
+                .then()
+                .statusCode(200)
+                //.log().body()
+                .body("status", is("ok"),
+                        "hints.size()", is(greaterThan(0)),
+                        "hints", hasItem(allOf(hasEntry("displayed", "abs"), hasEntry("value", "abs"))));
+    }
+    
+    @Test
+    public void testImportMethodParam() throws IOException {
+        given()
+                .when()
+                .body(buildHint("/scripts/hint-import-method-param.groovy", 1, 4, "before"))
                 .contentType(ContentType.JSON)
                 //.log().body()
                 .post("/api/gce/hint")

@@ -5,7 +5,7 @@ import {ifDefined} from 'lit/directives/if-defined.js';
 import { ViewElement } from '../../components/view';
 
 import { GCEStore } from '../../app/store';
-import { Script, back, save, readFile } from './editor-actions';
+import { Script, back, save, validateScript } from './editor-actions';
 
 import '../../components/editor';
 import { GroovyEditorElement } from '../../components/editor';
@@ -34,7 +34,6 @@ export class GroovyEditorPageElement extends ViewElement {
 	
 	@state()
 	attachment?: File;
-	
 			
 	@query('#scriptName')
 	scriptNameElement?:HTMLInputElement;
@@ -44,8 +43,7 @@ export class GroovyEditorPageElement extends ViewElement {
 	
 	@query("#fileInput")
 	fileInputElement?: HTMLInputElement;
-	
-	
+		
 	
 	constructor() {
 	    super();
@@ -54,6 +52,7 @@ export class GroovyEditorPageElement extends ViewElement {
 			this.modified = codeChange;
 		});
 		this.addEventListener('editor-lint', (e: Event) => {this.hasErrors = (e as any).detail.errors.length > 0;});
+		this.addEventListener('editor-save', (e: Event) => {this.handleSave();});
   	}
 
 
@@ -79,13 +78,9 @@ export class GroovyEditorPageElement extends ViewElement {
 					`];
 	}
 	
-
-
-
 	
 	render() {		
 		return html`
-
 			${this.pageTitleTemplate}
 			${this.loadingTemplate}
 			${this.errorTemplate}
@@ -109,32 +104,27 @@ export class GroovyEditorPageElement extends ViewElement {
     				<label>File Attachment</label>
 						<div>${this.attachment.name}</div>
   				</div>	
-				
-				
 				`: undefined}
 				
-								
 				<div class="btn-group" role="group" aria-label="Run">			  		
 					<button ?disabled=${!this.modified || this.hasErrors } type="button" class="btn btn-primary mr-2" @click=${this.handleSave}>Save</button>
 					<button type="button" class="btn btn-primary mr-2" @click=${this.selectFile}>File</button>
 					<button type="button" class="btn btn-secondary" @click=${(e: MouseEvent)=> this.dispatch(back())}>Back</button>	
 				</div>
 			</div>
-
     `;
 	}
 	
 	
 	selectFile(e: MouseEvent) {
 		if (this.fileInputElement) {
-			console.log("selectFile", e.target);
 			this.modified = true;
 			this.fileInputElement.click();
 		}
 	}
 	
+	
 	fileChanged(e: Event){
-		console.log("fileChange", e.target);
 		 let fileInput: HTMLInputElement =  e.target as any;
 		if (fileInput && fileInput.files && fileInput.files?.length>0){
 			this.attachment = fileInput.files[0];
@@ -143,21 +133,27 @@ export class GroovyEditorPageElement extends ViewElement {
 	}
 	
 	
-	handleSave(e: MouseEvent){
-		if (this.groovyEditor && this.groovyEditor.validate()){
-			let name= this.scriptNameElement && this.scriptNameElement.value? this.scriptNameElement.value: "undefined.groovy";
-			let contents = new File([this.groovyEditor.script], name,{type:"text/plain", lastModified:new Date().getTime()});
-			let updateScript = <Script>{
-				scriptId: this.targetScript?.scriptId,				
-				contents: contents,
-				attachment: this.attachment
-			};
-			console.log("save", this.targetScript?.scriptId, updateScript);
-			this.dispatch(save(updateScript));
-			this.modified = false;
+	 async handleSave(){
+		try{
+			//
+			this.dispatch(validateScript(true));
+			if (this.groovyEditor &&  await this.groovyEditor.validate()){
+				let name= this.scriptNameElement && this.scriptNameElement.value? this.scriptNameElement.value: "undefined.groovy";
+				let contents = new File([this.groovyEditor.script], name,{type:"text/plain", lastModified:new Date().getTime()});
+				let updateScript = <Script>{							
+					contents: contents,
+					attachment: this.attachment
+				};
+				if (this.targetScript && this.targetScript.scriptId){
+					updateScript.scriptId= this.targetScript.scriptId;
+				}
+				this.dispatch(save(updateScript));
+				this.modified = false;
+			}
+		}finally{
+			this.dispatch(validateScript(false));
 		}
 	}
-
 
 	
 	 stateChanged(state: GCEStore) {
@@ -184,11 +180,7 @@ export class GroovyEditorPageElement extends ViewElement {
 				this.pageTitle = 'Editor';
 			}
 		}
-
 	}
-
-
-
 
 
 }

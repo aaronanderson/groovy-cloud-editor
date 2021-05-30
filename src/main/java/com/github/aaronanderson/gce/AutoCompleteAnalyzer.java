@@ -35,8 +35,7 @@ import org.codehaus.groovy.ast.expr.PropertyExpression;
 import org.codehaus.groovy.ast.expr.VariableExpression;
 import org.codehaus.groovy.control.SourceUnit;
 import org.codehaus.groovy.tools.GroovyClass;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.jboss.logging.Logger;
 
 import com.google.common.jimfs.Jimfs;
 
@@ -62,7 +61,7 @@ import io.github.classgraph.TypeVariableSignature;
 
 public class AutoCompleteAnalyzer implements AutoCloseable {
 
-    static Logger logger = LoggerFactory.getLogger(AutoCompleteAnalyzer.class);
+    static Logger logger = Logger.getLogger(AutoCompleteAnalyzer.class);
 
     private static final Map<Class<?>, Class<?>> WRAPPER_TYPES;
     static {
@@ -89,7 +88,6 @@ public class AutoCompleteAnalyzer implements AutoCloseable {
         classGraph.rejectPackages(rejectPackages.toArray(new String[rejectPackages.size()]));
         classGraph.enableSystemJarsAndModules().enableClassInfo().enableMethodInfo().enableFieldInfo();
         globalScanResult = classGraph.scan();
-
     }
 
     @Override
@@ -146,8 +144,9 @@ public class AutoCompleteAnalyzer implements AutoCloseable {
         private final ScanResult scriptResult;
         private int lastImportLine;
         private final List<Hint> hints = new LinkedList<>();
-        private final List<String> importedPackages = new LinkedList<>();
-        private final List<String> importedClasses = new LinkedList<>();
+        private final List<PackageInfo> importedPackages = new LinkedList<>();
+        private final List<ClassInfo> importedClasses = new LinkedList<>();
+        private final List<MethodInfo> importedMethods = new LinkedList<>();
         private final LinkedList<VariableScope> targetVariableScopes = new LinkedList<>();
         private final Map<TypeSignature, String> paramNameCache = new HashMap<>();
         private final Set<String> ignoreVarNames = new HashSet<>();
@@ -168,13 +167,12 @@ public class AutoCompleteAnalyzer implements AutoCloseable {
         private ClassInfoList allClassInfo() {
             ClassInfoList classInfoList = ClassInfoList.emptyList();
             List<ClassInfoList> importedClassInfo = new LinkedList<>();
-            for (String scanPackage : importedPackages) {
-                PackageInfo packageInfo = globalScanResult.getPackageInfo(scanPackage);
+            for (PackageInfo packageInfo : importedPackages) {
                 importedClassInfo.add(packageInfo.getClassInfo());
             }
             Set<ClassInfo> importedClassInfoList = new HashSet<>();
-            for (String scanClass : importedClasses) {
-                importedClassInfoList.add(globalScanResult.getClassInfo(scanClass));
+            for (ClassInfo classInfo : importedClasses) {
+                importedClassInfoList.add(classInfo);
             }
             importedClassInfo.add(new ClassInfoList(importedClassInfoList));
             if (scriptResult != null) {
@@ -197,7 +195,7 @@ public class AutoCompleteAnalyzer implements AutoCloseable {
         private List<Hint> scan() {
             constructorHint = autoCompleteRequest.getConstructorHint();
             propertyHint = autoCompleteRequest.getPropertyHint();
-            importedPackages.add("java.lang");
+            importedPackages.add(globalScanResult.getPackageInfo("java.lang"));
             lastImportLine = scanImports();
 
             AutoCompleteVisitor visitor = new AutoCompleteVisitor(autoCompleteRequest);
@@ -217,14 +215,12 @@ public class AutoCompleteAnalyzer implements AutoCloseable {
             Collections.reverse(targetVariableScopes);
             LinkedList<ASTNode> targetNodes = visitor.getTargetNodes();
             if (targetNodes.size() > 0) {
-                int targetLine = autoCompleteRequest.getLine() + 1;
-                int targetColumn = autoCompleteRequest.getCh();
                 if (logger.isDebugEnabled()) {
-                    logger.debug(String.format("Target %d ASTNodes found for line %d column %d", targetNodes.size(), targetLine, autoCompleteRequest.getCh()));
+                    logger.debug(String.format("Target %d ASTNodes found for line %d column %d", targetNodes.size(), autoCompleteRequest.getLine() + 1, autoCompleteRequest.getCh()));
                 }
                 while (targetNodes.size() > 0) {
                     ASTNode node = targetNodes.pop();
-                    if ((node.getLineNumber() <= targetLine && targetLine <= node.getLastLineNumber()) && (node.getColumnNumber() <= targetColumn && targetColumn <= node.getLastColumnNumber())) {
+                    if (nodeMatch(node)) {
                         ASTNode prevNode = null;
                         while (!targetNodes.isEmpty()) {
                             ASTNode currentNode = targetNodes.pop();
@@ -242,6 +238,7 @@ public class AutoCompleteAnalyzer implements AutoCloseable {
                                 logger.debug(String.format("Prev ASTNode %s found for line %d-%d column %d-%d %s", prevNode, prevNode.getLineNumber(), prevNode.getLastLineNumber(), prevNode.getColumnNumber(), prevNode.getLastColumnNumber(), prevNode.getText()));
                             }
                         }
+
                         if (node instanceof ConstructorCallExpression) {
                             ConstructorCallExpression constructor = (ConstructorCallExpression) node;
                             if (prevNode instanceof VariableExpression) {
@@ -250,7 +247,12 @@ public class AutoCompleteAnalyzer implements AutoCloseable {
                                 newConstructorHint(constructor, (MethodCallExpression) prevNode);
                             }
                         } else if (node instanceof MethodCallExpression) {
-                            methodHint(autoCompleteRequest, (MethodCallExpression) node);
+                            if (propertyHint != null || prevNode instanceof MethodCallExpression) {
+                                methodReturnHint((MethodCallExpression) node);
+                            } else {
+                                methodHint((MethodCallExpression) node);
+                            }
+
                         } else if (node instanceof PropertyExpression) {
                             PropertyExpression prop = (PropertyExpression) node;
                             if (prevNode instanceof VariableExpression) {
@@ -274,79 +276,104 @@ public class AutoCompleteAnalyzer implements AutoCloseable {
             return hints;
         }
 
+        private boolean nodeMatch(ASTNode node) {
+            int targetLine = autoCompleteRequest.getLine() + 1;
+            int targetColumn = autoCompleteRequest.getCh();
+
+            boolean lineMatch = node.getLineNumber() <= targetLine && targetLine <= node.getLastLineNumber();
+            boolean lineSplit = node.getLineNumber() != node.getLastLineNumber();
+            boolean colMatch = node.getColumnNumber() <= targetColumn && targetColumn <= node.getLastColumnNumber();
+
+            return lineMatch && (colMatch || lineSplit);
+        }
+
         private int scanImports() {
             int lastImportLine = 0;
             for (ImportNode i : sourceUnit.getAST().getImports()) {
                 printASTDetails(i, "Import %s\n", i.getPackageName());
-                importedPackages.add(i.getType().getName());
+                ClassInfo classInfo = globalScanResult.getClassInfo(i.getType().getTypeClass().getName());
+                if (classInfo != null) {
+                    importedClasses.add(classInfo);
+                }
                 lastImportLine = i.getLastLineNumber() > lastImportLine ? i.getLastLineNumber() : lastImportLine;
             }
             for (ImportNode i : sourceUnit.getAST().getStarImports()) {
                 printASTDetails(i, "Star Import %s\n", i.getPackageName());
-                importedPackages.add(i.getPackageName().substring(0, i.getPackageName().length() - 1));
+                String packageName = i.getPackageName().substring(0, i.getPackageName().length() - 1);
+                PackageInfo packageInfo = globalScanResult.getPackageInfo(packageName);
+                if (packageInfo != null) {
+                    importedPackages.add(packageInfo);
+                }
                 lastImportLine = i.getLastLineNumber() > lastImportLine ? i.getLastLineNumber() : lastImportLine;
             }
             for (Entry<String, ImportNode> i : sourceUnit.getAST().getStaticImports().entrySet()) {
-                printASTDetails(i.getValue(), "Static Import %s %s\n", i.getKey(), i.getValue().getPackageName());
-                importedPackages.add(i.getValue().getType().getTypeClass().getName());
+                String className = i.getValue().getType().getTypeClass().getName();
+                printASTDetails(i.getValue(), "Static Import %s %s\n", i.getKey(), className);
+                ClassInfo classInfo = globalScanResult.getClassInfo(className);
+                if (classInfo != null) {
+                    importedMethods.addAll(classInfo.getMethodInfo().filter(m -> m.getName().equals(i.getValue().getAlias())));
+                }
                 lastImportLine = i.getValue().getLastLineNumber() > lastImportLine ? i.getValue().getLastLineNumber() : lastImportLine;
             }
             for (Entry<String, ImportNode> i : sourceUnit.getAST().getStaticStarImports().entrySet()) {
-                printASTDetails(i.getValue(), "Static Star Import %s %s\n", i.getKey(), i.getValue().getPackageName());
-                importedPackages.add(i.getValue().getType().getTypeClass().getName());
+                String className = i.getValue().getType().getTypeClass().getName();
+                printASTDetails(i.getValue(), "Static Star Import %s %s\n", i.getKey(), className);
+                ClassInfo classInfo = globalScanResult.getClassInfo(className);
+                if (classInfo != null) {
+                    importedMethods.addAll(classInfo.getMethodInfo());
+                }
                 lastImportLine = i.getValue().getLastLineNumber() > lastImportLine ? i.getValue().getLastLineNumber() : lastImportLine;
             }
             return lastImportLine;
         }
 
         private void importHint(ImportNode importNode) {
-            String packageName = null;
+            int[] entered = new int[] { 0, 0 };
             if (importNode.getPackageName() != null) {
-                packageName = importNode.getPackageName().substring(0, importNode.getPackageName().length() - 1);
+                String packageName = importNode.getPackageName();
+                packageName = packageName.substring(0, packageName.length() - 1);
+                PackageInfo packageInfo = globalScanResult.getPackageInfo(packageName);
+                if (packageInfo != null) {
+                    PackageInfoList childPackageInfoList = packageInfo.getChildren();
+                    ClassInfoList classInfoList = packageInfo.getClassInfo();
+                    //.filter(p-> importHint!=null? p.(): true))
+                    for (PackageInfo childPackageInfo : childPackageInfoList) {
+                        String hint = childPackageInfo.getName().substring(packageInfo.getName().length() + 1);
+                        StringBuilder display = new StringBuilder(hint).append(" - package");
+                        hints.add(new Hint("import-package", entered, display.toString(), hint));
+                    }
+                    for (ClassInfo classInfo : classInfoList) {
+                        String hint = classInfo.getSimpleName();
+                        hints.add(new Hint("import-class", entered, hint, hint));
+                    }
+                }
             } else {
-                packageName = importNode.getType().getTypeClass().getName();
-            }
-            PackageInfo packageInfo = globalScanResult.getPackageInfo(packageName);
-            if (packageInfo != null) {
-                PackageInfoList childPackageInfoList = packageInfo.getChildren();
-                ClassInfoList classInfoList = packageInfo.getClassInfo();
-                int[] entered = new int[] { 0, 0 };
-                //.filter(p-> importHint!=null? p.(): true))
-                for (PackageInfo childPackageInfo : childPackageInfoList) {
-                    String hint = childPackageInfo.getName().substring(packageInfo.getName().length() + 1);
-                    StringBuilder display = new StringBuilder(hint).append(" - package");
-                    hints.add(new Hint(entered, display.toString(), hint));
-                }
-                for (ClassInfo classInfo : classInfoList) {
-                    String hint = classInfo.getSimpleName();
-                    hints.add(new Hint(entered, hint, hint));
+                String className = importNode.getType().getTypeClass().getName();
+                ClassInfo classInfo = globalScanResult.getClassInfo(className);
+                if (classInfo != null) {
+                    MethodInfoList methods = classInfo.getMethodInfo();
+                    //property parser may have inserted underscore placeholder
+                    if (importNode.getAlias() != null) {
+                        methods = methods.filter(m -> m.getName().startsWith(importNode.getAlias()));
+                    }
+                    methods.getNames().stream().distinct().sorted().forEach(method -> hints.add(new Hint("import-method", entered, method, method)));
                 }
             }
-
-        }
-
-        private String packageLocalName(PackageInfo packageInfo) {
-            String[] packageElements = packageInfo.getName().split("\\.");
-            return packageElements[packageElements.length - 1];
         }
 
         private void newConstructorHint(ConstructorCallExpression constructorNode, VariableExpression varNode) {
             String varType = varNode.getType().getName();
             boolean isObject = varNode.isDynamicTyped();//java.lang.Object.class.equals(varType);
-            if (!isObject || !constructorHint.isBlank()) {
-
-                ClassInfoList classInfoList = allClassInfo();
-                if (!constructorHint.isBlank()) {
-                    classInfoList = classInfoList.filter(c -> c.getSimpleName().startsWith(constructorHint));
-                }
-                if (!isObject) {
-                    ClassInfo classInfo = getClassInfo(varType);
-                    classInfoList = classInfoList.getStandardClasses().getAssignableTo(classInfo);
-                }
-                constructorHints(classInfoList, (ArgumentListExpression) constructorNode.getArguments());
+            ClassInfoList classInfoList = ClassInfoList.emptyList();
+            if (!isObject) {
+                classInfoList = constructorClasses(constructorNode, false);
+                ClassInfo classInfo = getClassInfo(varType);
+                classInfoList = classInfoList.getStandardClasses().getAssignableTo(classInfo);
             } else {
-                logger.debug("Object class type and no constructor prefix, unable to provide specific hint.");
+                classInfoList = constructorClasses(constructorNode, true);
             }
+            constructorHints(classInfoList, (ArgumentListExpression) constructorNode.getArguments());
+
         }
 
         private void newConstructorHint(ConstructorCallExpression constructorNode, MethodCallExpression methodNode) {
@@ -359,20 +386,30 @@ public class AutoCompleteAnalyzer implements AutoCloseable {
                     constructorIndex = i;
                 }
             }
-            if (!constructorHint.isBlank()) {
-                ClassInfoList classInfoList = allClassInfo();
-                MethodInfoList methods = findMethods(methodNode, true, argumentExpressions);
-                for (MethodInfo methodInfo : methods) {
-                    MethodParameterInfo parameterInfo = methodInfo.getParameterInfo()[constructorIndex];
-                    if (!constructorHint.isBlank()) {
-                        classInfoList = classInfoList.filter(c -> c.getSimpleName().startsWith(constructorHint));
-                    }
-                    classInfoList = classInfoList.getStandardClasses().filter(c -> isAssignable(c.loadClass(), parameterInfo.getTypeSignatureOrTypeDescriptor()));
-                    constructorHints(classInfoList, (ArgumentListExpression) constructorNode.getArguments());
-                }
-            } else {
-                logger.debug("No method parameter type data available, unable to provide specific hint.");
+
+            ClassInfoList classInfoList = constructorClasses(constructorNode, true);
+            MethodInfoList methods = findMethods(methodNode, true);
+            for (MethodInfo methodInfo : methods) {
+                MethodParameterInfo parameterInfo = methodInfo.getParameterInfo()[constructorIndex];
+                classInfoList = classInfoList.getStandardClasses().filter(c -> isAssignable(c.loadClass(), parameterInfo.getTypeSignatureOrTypeDescriptor()));
+                constructorHints(classInfoList, (ArgumentListExpression) constructorNode.getArguments());
             }
+        }
+
+        private ClassInfoList constructorClasses(ConstructorCallExpression constructorNode, boolean restricted) {
+            String constType = constructorNode.getType().getTypeClass().getName();
+            if (!Object.class.getName().equals(constType)) {
+                ClassInfoList list = new ClassInfoList();
+                list.add(getClassInfo(constType));
+                return list;
+            } else if (!constructorHint.isBlank() || !restricted) {
+                ClassInfoList classInfoList = allClassInfo();
+                if (!constructorHint.isBlank()) {
+                    classInfoList = classInfoList.filter(c -> c.getSimpleName().startsWith(constructorHint));
+                }
+                return classInfoList;
+            }
+            return ClassInfoList.emptyList();
         }
 
         private void propertyHint(VariableExpression var) {
@@ -429,11 +466,27 @@ public class AutoCompleteAnalyzer implements AutoCloseable {
                 }
             } else if (prop.getObjectExpression() instanceof ClassExpression) {
                 clazz = ((ClassExpression) prop.getObjectExpression()).getType().getName();
+            } else if (prop.getObjectExpression() instanceof MethodCallExpression) {
+                clazz = methodReturnType((MethodCallExpression) prop.getObjectExpression());
             }
             addPropertyHints(clazz, propertyHint != null ? propertyHint : prop.getPropertyAsString(), filter);
         }
 
-        private void methodHint(AutoCompleteRequest autoCompleteRequest, MethodCallExpression methodNode) {
+        private void methodReturnHint(MethodCallExpression methodNode) {
+            addPropertyHints(methodReturnType(methodNode), propertyHint != null ? propertyHint : "", null);
+        }
+
+        private void methodHint(MethodCallExpression methodNode) {
+            ASTNode targetNode = methodNode;
+            while (targetNode instanceof MethodCallExpression) {
+                MethodCallExpression targetMethodNode = (MethodCallExpression) targetNode;
+                if (nodeMatch(targetMethodNode.getObjectExpression())) {
+                    methodNode = targetMethodNode;
+                    break;
+                } else {
+                    targetNode = targetMethodNode.getObjectExpression();
+                }
+            }
             int parameterIndex = -1;
             ArgumentListExpression argumentExpressions = (ArgumentListExpression) methodNode.getArguments();
             int targetLine = autoCompleteRequest.getLine() + 1;
@@ -444,41 +497,40 @@ public class AutoCompleteAnalyzer implements AutoCloseable {
                     parameterIndex = i;
                 }
             }
-            final int fparameterIndex = parameterIndex + 1; //method autocomplete should look beyond the existing arguments.        
+            final int fparameterIndex = parameterIndex;
             String methodHintValue = ((ConstantExpression) methodNode.getMethod()).getText();
 
-            //if (isFunction(methodNode)) {
-            //System.out.format("Function %s\n", methodHintValue);
-            //} else {
-            if (propertyHint != null) {
-                MethodInfoList methodList = findMethods(methodNode, true, argumentExpressions);
-                if (methodList.size() == 1) {
-                    TypeSignature returnType = methodList.get(0).getTypeDescriptor().getResultType();
-                    if (returnType instanceof ClassRefTypeSignature) {
-                        ClassInfo classReturnType = ((ClassRefTypeSignature) returnType).getClassInfo();
-                        addPropertyHints(classReturnType.getName(), propertyHint, null);
+            MethodInfoList methodList = findMethods(methodNode, false);
+            methodList = methodList.filter(m -> m.getParameterInfo().length > fparameterIndex);
+            methodHints(methodHintValue, methodList, argumentExpressions);
 
-                    }
-                }
-            } else {
-                MethodInfoList methodList = findMethods(methodNode, false, argumentExpressions);
-                methodList = methodList.filter(m -> m.getParameterInfo().length > fparameterIndex);
-                methodHints(methodHintValue, methodList, argumentExpressions);
-            }
-
-            //}
         }
 
-        private MethodInfoList findMethods(MethodCallExpression methodNode, boolean exact, ArgumentListExpression argumentExpressions) {
+        private String methodReturnType(MethodCallExpression methodNode) {
+            MethodInfoList methodList = findMethods(methodNode, true);
+            if (methodList.size() == 1) {
+                TypeSignature returnType = methodList.get(0).getTypeDescriptor().getResultType();
+                if (returnType instanceof ClassRefTypeSignature) {
+                    return ((ClassRefTypeSignature) returnType).getClassInfo().getName();
+
+                }
+            }
+            return null;
+        }
+
+        private MethodInfoList findMethods(MethodCallExpression methodNode, boolean exact) {
+            ArgumentListExpression argumentExpressions = (ArgumentListExpression) methodNode.getArguments();
             ConstantExpression methodReference = (ConstantExpression) methodNode.getMethod();
             String methodName = (String) methodReference.getValue();
             String clazz = null;
+            List<MethodInfo> localMethods = new LinkedList<>();
             if (methodNode.getObjectExpression() instanceof VariableExpression) {
                 VariableExpression varNode = (VariableExpression) methodNode.getObjectExpression();
                 if (varNode.getAccessedVariable() instanceof VariableExpression) {
                     clazz = varNode.getAccessedVariable().getType().getTypeClass().getName();
                 } else if (varNode.getName().startsWith("this")) {
                     clazz = sourceUnit.getAST().getScriptClassDummy().getName();
+                    localMethods.addAll(importedMethods);
                 } else {
                     clazz = methodNode.getObjectExpression().getType().getTypeClass().getName();
                 }
@@ -486,38 +538,47 @@ public class AutoCompleteAnalyzer implements AutoCloseable {
                 clazz = methodNode.getObjectExpression().getType().getTypeClass().getName();
             } else if (methodNode.getObjectExpression() instanceof ClassExpression) {
                 clazz = methodNode.getObjectExpression().getType().getTypeClass().getName();
+            } else if (methodNode.getObjectExpression() instanceof MethodCallExpression) {
+                clazz = methodReturnType((MethodCallExpression) methodNode.getObjectExpression());
             }
             if (clazz == null || Object.class.getName().equals(clazz)) {
                 return MethodInfoList.emptyList();
             }
             ClassInfo classInfo = getClassInfo(clazz);
-            final int size = argumentExpressions.getExpressions().size();
-            MethodInfoFilter nameFilter = (m) -> m.getName().startsWith(methodName);
-            MethodInfoFilter countFilter = (m) -> exact ? m.getParameterInfo().length == size : m.getParameterInfo().length >= size;
-            MethodInfoFilter typeFilter = (m) -> {
-                if (m.isSynthetic()) {
-                    return false;
-                }
-                boolean matches = true;
-                for (int i = 0; i < argumentExpressions.getExpressions().size(); i++) {
-                    Expression arg = argumentExpressions.getExpression(i);
-                    Class<?> argType = arg.getType().getTypeClass();
-                    if (!Object.class.equals(argType)) {
-                        MethodParameterInfo paramInfo = m.getParameterInfo()[i];
-                        if (!isAssignable(argType, paramInfo.getTypeSignatureOrTypeDescriptor())) {
-                            matches = false;
+            //may be null due to script class reference but a full class generation was not performed.
+            if (classInfo != null) {
+                final int size = argumentExpressions.getExpressions().size();
+                MethodInfoFilter nameFilter = (m) -> m.getName().startsWith(methodName);
+                MethodInfoFilter countFilter = (m) -> exact ? m.getParameterInfo().length == size : m.getParameterInfo().length >= size;
+                MethodInfoFilter typeFilter = (m) -> {
+                    if (m.isSynthetic()) {
+                        return false;
+                    }
+                    boolean matches = true;
+                    for (int i = 0; i < argumentExpressions.getExpressions().size(); i++) {
+                        Expression arg = argumentExpressions.getExpression(i);
+                        Class<?> argType = arg.getType().getTypeClass();
+                        if (!Object.class.equals(argType)) {
+                            MethodParameterInfo paramInfo = m.getParameterInfo()[i];
+                            if (!isAssignable(argType, paramInfo.getTypeSignatureOrTypeDescriptor())) {
+                                matches = false;
+                            }
                         }
                     }
-                }
-                return matches;
-            };
-            return classInfo.getMethodInfo().filter(m -> nameFilter.accept(m) && countFilter.accept(m) && typeFilter.accept(m));
+                    return matches;
+                };
+                MethodInfoList infoList = classInfo.getMethodInfo().filter(m -> nameFilter.accept(m) && countFilter.accept(m) && typeFilter.accept(m));
+                infoList.addAll(localMethods);
+                return infoList;
+            } else {
+                return new MethodInfoList(localMethods);
+            }
         }
 
         private void constructorHints(ClassInfoList classInfoList, ArgumentListExpression argumentExpressions) {
             for (ClassInfo classInfo : classInfoList) {
                 for (MethodInfo constInfo : classInfo.getConstructorInfo()) {
-                    addHint(constructorHint, classInfo.getName(), classInfo.getSimpleName(), constInfo, argumentExpressions);
+                    addHint(constructorHint != null ? constructorHint : "", classInfo.getName(), classInfo.getSimpleName(), constInfo, argumentExpressions);
                 }
             }
         }
@@ -549,11 +610,19 @@ public class AutoCompleteAnalyzer implements AutoCloseable {
             }
             displayed.append(")");
             value.append(")");
-            if (methodInfo.getTypeSignatureOrTypeDescriptor() != null && !methodInfo.getName().startsWith("<")) {
+            boolean isConstructor = methodInfo.getName().startsWith("<");
+            if (methodInfo.getTypeSignatureOrTypeDescriptor() != null && !isConstructor) {
                 displayed.append(" - ").append(methodInfo.getTypeSignatureOrTypeDescriptor().getResultType().toStringWithSimpleNames());
             }
             int[] entered = new int[] { 0, hint.length() };
-            hints.add(new Hint(entered, displayed.toString(), value.toString()));
+            if (isConstructor) {
+                int offset = displayed2.lastIndexOf('.');
+                if (offset > 0) {
+                    entered[0] = entered[0] + offset + 1;
+                }
+
+            }
+            hints.add(new Hint(isConstructor ? "constructor" : "method", entered, displayed.toString(), value.toString()));
 
         }
 
@@ -562,13 +631,16 @@ public class AutoCompleteAnalyzer implements AutoCloseable {
             for (FieldInfo fieldInfo : fieldList) {
                 StringBuilder displayed = new StringBuilder();
                 StringBuilder value = new StringBuilder();
-                displayed.append(fieldInfo.getTypeDescriptor().toStringWithSimpleNames()).append(" ").append(fieldInfo.getName());
+                displayed.append(fieldInfo.getTypeDescriptor().toStringWithSimpleNames()).append(" ");
+                int offset = displayed.length();
+                displayed.append(fieldInfo.getName());
                 value.append(fieldInfo.getName());
-                int[] entered = new int[] { 0, hint.length() };
-                hints.add(new Hint(entered, displayed.toString(), value.toString()));
+                int[] entered = new int[] { offset, hint.length() };
+                hints.add(new Hint("field", entered, displayed.toString(), value.toString()));
             }
         }
 
+        //Java code should be compiled with -parameters option. The same option should be set on the Groovy CompilerConfiguration
         private String argumentParameterName(int paramIndex, TypeSignature type, ArgumentListExpression argumentExpressions) {
             if (paramIndex < argumentExpressions.getExpressions().size()) {
                 Expression argument = argumentExpressions.getExpressions().get(paramIndex);
@@ -607,10 +679,6 @@ public class AutoCompleteAnalyzer implements AutoCloseable {
         }
 
     }
-
-    //    @Override
-    //    public void call(SourceUnit source, GeneratorContext context, ClassNode classNode) throws CompilationFailedException {
-    //    }
 
     private static boolean isAssignable(Class<?> clazz, TypeSignature type) {
         if (type instanceof ArrayTypeSignature) {
@@ -654,7 +722,7 @@ public class AutoCompleteAnalyzer implements AutoCloseable {
             Object[] formatArgs = Arrays.copyOf(lineArgs, lineArgs.length + args.length);
             System.arraycopy(args, 0, formatArgs, lineArgs.length, args.length);
 
-            logger.info(String.format("line: %d-%d %d-%d - %s\t" + format, formatArgs));
+            logger.debug(String.format("line: %d-%d %d-%d - %s\t" + format, formatArgs));
         }
     }
 

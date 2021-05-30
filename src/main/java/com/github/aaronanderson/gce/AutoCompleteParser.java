@@ -10,37 +10,29 @@ import java.net.URLConnection;
 import java.net.URLStreamHandler;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import org.apache.commons.io.IOUtils;
 import org.codehaus.groovy.ast.ClassNode;
-import org.codehaus.groovy.ast.VariableScope;
 import org.codehaus.groovy.classgen.GeneratorContext;
 import org.codehaus.groovy.control.CompilationFailedException;
 import org.codehaus.groovy.control.CompilationUnit;
-import org.codehaus.groovy.control.MultipleCompilationErrorsException;
-import org.codehaus.groovy.control.Phases;
-import org.codehaus.groovy.control.SourceUnit;
 import org.codehaus.groovy.control.CompilationUnit.IPrimaryClassNodeOperation;
 import org.codehaus.groovy.control.CompilationUnit.ISourceUnitOperation;
 import org.codehaus.groovy.control.CompilerConfiguration;
+import org.codehaus.groovy.control.MultipleCompilationErrorsException;
+import org.codehaus.groovy.control.Phases;
+import org.codehaus.groovy.control.SourceUnit;
 import org.codehaus.groovy.tools.GroovyClass;
-
-import io.github.classgraph.ClassGraph;
-import io.github.classgraph.ScanResult;
-import io.github.classgraph.TypeSignature;
 
 class AutoCompleteParser {
 
-    static Pattern NEW_CONSTRUCTOR = Pattern.compile("new\\s*(\\w*)\\s*($|\\))", Pattern.MULTILINE);
     static Pattern METHOD_PARAM = Pattern.compile("\\([^)]*$", Pattern.MULTILINE);
     static Pattern PROPERTY = Pattern.compile("\\.\\s*(\\w*)\\s*$", Pattern.MULTILINE);
     static Pattern IMPORT = Pattern.compile("import (.+[^\\.;]+)(\\.?)", Pattern.MULTILINE);
@@ -75,16 +67,10 @@ class AutoCompleteParser {
                 //attempt to adjust source so that it compiles
                 try {
                     List<String> lines = IOUtils.readLines(new StringReader(scriptContents));
-                    boolean handled = constructorHint(lines);
-                    if (!handled) {
-                        handled = methodParamHint(lines);
-                    }
-                    if (!handled) {
-                        handled = importHint(lines);
-                    }
-                    if (!handled) {
-                        handled = propertyHint(lines);
-                    }
+                    boolean handled = methodParamHint(lines);
+                    handled = handled || importHint(lines);//needs to be before the property hint
+                    handled = handled || propertyHint(lines);
+                    handled = handled || constructorHint(lines);
                 } catch (IOException e) {
                     AutoCompleteAnalyzer.logger.error("Unable to read script contents", e);
                 }
@@ -145,17 +131,45 @@ class AutoCompleteParser {
 
     private boolean constructorHint(List<String> lines) {
         String srcLine = lines.get(autoCompleteRequest.getLine());
-        Matcher m = NEW_CONSTRUCTOR.matcher(srcLine);
-        if (m.find()) {
-            StringBuilder modifedSrc = new StringBuilder(lines.get(autoCompleteRequest.getLine()));
-            autoCompleteRequest.setConstructorHint(m.group(1));
-            int start = m.start(1);
-            int end = m.end(1);
-            modifedSrc.replace(start, end, "Object()");
+        StringBuilder modifedSrc = new StringBuilder(srcLine);
+        //first, replace the constructor value with Object. It is too difficult to determine if the constructor text is for a valid class or a partial match without full AST processing.
+        StringBuilder constructorHint = new StringBuilder();
+        int startIndex = -1;
+        for (int i = autoCompleteRequest.getCh() - 1; i >= 0; i--) {
+            char c = srcLine.charAt(i);
+            if (c == '(' || c == ')' || c == ' ') {
+                continue;
+            }
+            if (c == 'w' && i > 2) {
+                if (srcLine.charAt(i - 1) == 'e' && srcLine.charAt(i - 2) == 'n') {
+                    startIndex = i + 1;
+                    break;
+                }
+            }
+            constructorHint.insert(0, c);
+        }
+        if (startIndex != -1) {
+            modifedSrc.replace(startIndex, autoCompleteRequest.getCh(), " Object()");
+            autoCompleteRequest.setConstructorHint(constructorHint.toString());
+            //second, make a crude attempt to balance parenthesis.
+            int depth = 0;
+            for (int i = 0; i < modifedSrc.length(); i++) {
+                char c = modifedSrc.charAt(i);
+                depth = c == '(' ? depth + 1 : depth;
+                depth = c == ')' ? depth - 1 : depth;
+                if (depth < 0) {
+                    modifedSrc.insert(i, '(');
+                    break;
+                }
+            }
+            if (depth > 0) {
+                modifedSrc.append(")");
+            }
             lines.set(autoCompleteRequest.getLine(), modifedSrc.toString());
             return compileUpdate(lines);
         }
         return false;
+
     }
 
     private boolean methodParamHint(List<String> lines) {
@@ -241,6 +255,7 @@ class AutoCompleteParser {
 
     }
 
+    //Not used
     public class AutoCompleteSourceOperation implements ISourceUnitOperation {
 
         @Override

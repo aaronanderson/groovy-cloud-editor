@@ -5,9 +5,6 @@ import java.io.InputStream;
 import java.io.PrintWriter;
 import java.io.Reader;
 import java.io.StringWriter;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
-import java.nio.file.StandardOpenOption;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Base64;
@@ -49,10 +46,7 @@ import org.codehaus.groovy.control.messages.WarningMessage;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.resteasy.plugins.providers.multipart.MultipartFormDataInput;
 import org.jboss.resteasy.plugins.providers.multipart.MultipartFormDataOutput;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.nio.file.Files;
+import org.jboss.logging.Logger;
 
 import groovy.lang.Binding;
 import groovy.lang.GroovyClassLoader;
@@ -66,7 +60,7 @@ import groovy.lang.Script;
 @Produces(MediaType.APPLICATION_JSON)
 public class GroovyCloudEditorRS {
 
-    static Logger logger = LoggerFactory.getLogger(GroovyCloudEditorRS.class);
+    static Logger logger = Logger.getLogger(GroovyCloudEditorRS.class);
 
     static String[][] SCRIPTS = new String[][] { new String[] { "test.groovy", null, null }, new String[] { "excel.groovy", "excel.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" } };
 
@@ -165,6 +159,7 @@ public class GroovyCloudEditorRS {
             }
 
             JsonObjectBuilder status = Json.createObjectBuilder();
+            //The GroovyClassLoader could be reused per user session with the codesource cachable option set. This would avoid having to recompile the script if there were no source changes.
             GroovyClassLoader gcl = new GroovyClassLoader();
             Map<String, Object> context = new HashMap<>();
             context.put("basePath", "/gce");
@@ -300,6 +295,7 @@ public class GroovyCloudEditorRS {
         JsonArrayBuilder hintsJson = Json.createArrayBuilder();
         for (Hint hint : hints) {
             JsonObjectBuilder hintJson = Json.createObjectBuilder();
+            hintJson.add("type", hint.getType());
             hintJson.add("entered", Json.createArrayBuilder().add(hint.getEntered()[0]).add(hint.getEntered()[1]));
             hintJson.add("displayed", hint.getDisplayed());
             hintJson.add("value", hint.getValue());

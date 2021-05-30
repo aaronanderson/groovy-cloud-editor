@@ -3,6 +3,7 @@ import {
 	FETCH_SCRIPTS, FETCH_SCRIPTS_SUCCESS, FETCH_SCRIPTS_ERROR,
 	NEW_SCRIPT,
 	EDIT_SCRIPT,
+	VALIDATE_SCRIPT,
 	DELETE_SCRIPT, DELETE_SCRIPT_SUCCESS, DELETE_SCRIPT_ERROR,
 	RUN_SCRIPT, RUN_SCRIPT_SUCCESS, RUN_SCRIPT_ERROR,
 	SAVE_SCRIPT, SAVE_SCRIPT_SUCCESS, SAVE_SCRIPT_ERROR,
@@ -47,6 +48,11 @@ const editor = (state: EditorState = initialState, action: any) => {
 
 			case EDIT_SCRIPT: {
 				draft.targetScript = action.payload.targetScript;
+				break
+			}
+			
+			case VALIDATE_SCRIPT: {
+				draft.loading = action.payload.validating;
 				break
 			}
 
