@@ -27,6 +27,23 @@ Valid Groovy scripts are sent to the server-side where they are executed using t
 
 ## Building and Running  ##
 
+Build the application:
+
+`mvn clean install`
+
+Run the application in Quarkus devmode:
+
+`mvn quarkus:dev`
+
+The application will be available at `http://localhost:5000`
+
+While Quarkus is running the Snowpack devserver can run concurrently for real-time TypeScript updates:
+
+`yarn start`
+
+To run Quarkus in production mode start the runner jar:
+
+`java -jar target/quarkus-app/quarkus-run.jar`
 
 ## Considerations ##
 
